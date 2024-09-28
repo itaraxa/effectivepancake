@@ -24,11 +24,11 @@ func Parse(raw string) (q Query, err error) {
 }
 
 func (q Query) String() string {
-	s := ">>>Query<<<\n\r"
-	s += fmt.Sprintf("Raw: %s\n\r", q.raw)
-	s += fmt.Sprintf("Type: %s\n\r", q.MetricType)
-	s += fmt.Sprintf("Name: %s\n\r", q.MetricName)
-	s += fmt.Sprintf("Value: %s\n\r", q.MetricRawValue)
+	s := "==== Query ====\n\r"
+	s += fmt.Sprintf(">Raw: %s\n\r", q.raw)
+	s += fmt.Sprintf(">>Type: %s\n\r", q.MetricType)
+	s += fmt.Sprintf(">>Name: %s\n\r", q.MetricName)
+	s += fmt.Sprintf(">>Value: %s\n\r", q.MetricRawValue)
 
 	return s
 }
