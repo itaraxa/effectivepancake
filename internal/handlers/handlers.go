@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
+	myErrors "github.com/itaraxa/effectivepancake/internal/errors"
 	"github.com/itaraxa/effectivepancake/internal/services"
 )
 
@@ -20,10 +22,15 @@ func UpdateMemStorageHandler(s services.Storager) http.HandlerFunc {
 
 		// Выполнение логики
 		q, err := services.ParseQueryString(req.URL.Path)
-		if err != nil {
-			http.Error(w, "Bad request: error in query", http.StatusBadRequest)
+		if err != nil && errors.Is(err, myErrors.ErrBadRawQuery) {
+			http.Error(w, "query string does not match the format", http.StatusNotFound)
 			return
 		}
+		if err != nil && (errors.Is(err, myErrors.ErrBadType) || errors.Is(err, myErrors.ErrBadValue)) {
+			http.Error(w, "шnvalid type or value", http.StatusBadRequest)
+			return
+		}
+
 		services.ShowQuery(q)
 
 		err = services.UpdateMetrica(q, s)

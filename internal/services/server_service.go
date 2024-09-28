@@ -1,39 +1,46 @@
 package services
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/itaraxa/effectivepancake/internal/errors"
 	"github.com/itaraxa/effectivepancake/internal/models"
 )
 
 // Функция для создания query
 func ParseQueryString(raw string) (q models.Query, err error) {
-	q.MetricType = strings.Split(raw, `/`)[2]
-	q.MetricName = strings.Split(raw, `/`)[3]
-	q.MetricRawValue = strings.Split(raw, `/`)[4]
+	queryString := raw[1:]
+	if len(strings.Split(queryString, `/`)) != 4 {
+		return q, errors.ErrBadRawQuery
+	}
+	q.MetricType = strings.Split(queryString, `/`)[1]
+	if q.MetricType != "gauge" && q.MetricType != "counter" {
+		return q, errors.ErrBadType
+	}
+	q.MetricName = strings.Split(queryString, `/`)[2]
+	q.MetricRawValue = strings.Split(queryString, `/`)[3]
 
 	return q, nil
 }
 
+// Функция для обновления метрики из запроса в репозитории
 func UpdateMetrica(q Querier, s Storager) error {
 	switch q.GetMetricaType() {
 	case "gauge":
 		g, err := strconv.ParseFloat(q.GetMetricaRawValue(), 64)
 		if err != nil {
-			return fmt.Errorf("parse gauge value error: %w", err)
+			return errors.ErrParseCounter
 		}
 		s.UpdateGauge(q.GetMetricName(), g)
 	case "counter":
 		c, err := strconv.Atoi(q.GetMetricaRawValue())
 		if err != nil {
-			return fmt.Errorf("parse counter value error: %w", err)
+			return errors.ErrParseCounter
 		}
 		s.AddCounter(q.GetMetricName(), int64(c))
-		// ms.Counter[q.MetricName] = append(ms.Counter[q.MetricName], int64(c))
 	default:
-		return fmt.Errorf("uncorrect type of metrica")
+		return errors.ErrBadType
 	}
 	return nil
 }

@@ -7,6 +7,7 @@ type Storager interface {
 	String() string
 }
 
+// Интерфейс для описания взаимодействия с запросом на обновление метрики
 type Querier interface {
 	GetMetricaType() string
 	GetMetricName() string
