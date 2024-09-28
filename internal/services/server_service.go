@@ -8,20 +8,6 @@ import (
 	"github.com/itaraxa/effectivepancake/internal/models"
 )
 
-// Интерфейс для описания взаимодействия с хранилищем метрик
-type Storager interface {
-	UpdateGauge(metric_name string, value float64) error
-	AddCounter(metric_name string, value int64) error
-	String() string
-}
-
-type Querier interface {
-	GetMetricaType() string
-	GetMetricName() string
-	GetMetricaRawValue() string
-	String() string
-}
-
 // Функция для создания query
 func ParseQueryString(raw string) (q models.Query, err error) {
 	q.MetricType = strings.Split(raw, `/`)[2]
