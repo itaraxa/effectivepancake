@@ -13,19 +13,21 @@ type MemStorage struct {
 }
 
 func (m *MemStorage) UpdateGauge(metric_name string, value float64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.Gauge[metric_name] = value
+
 	return nil
 }
 
 func (m *MemStorage) AddCounter(metric_name string, value int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.Counter[metric_name] = append(m.Counter[metric_name], value)
+
 	return nil
-}
-
-func (m *MemStorage) GetGauge(metric_name string) (float64, error) {
-	return 0.0, nil
-}
-
-func (m *MemStorage) GetCounter(metric_name string) ([]int64, error) {
-	return []int64{}, nil
 }
 
 func (m *MemStorage) String() string {

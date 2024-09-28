@@ -2,7 +2,6 @@ package models
 
 import (
 	"fmt"
-	"strings"
 )
 
 // Структура представляющая полученный запрос
@@ -13,16 +12,6 @@ type Query struct {
 	MetricRawValue string
 }
 
-// Функция для создания query
-func Parse(raw string) (q Query, err error) {
-	q.raw = raw
-	q.MetricType = strings.Split(q.raw, `/`)[2]
-	q.MetricName = strings.Split(q.raw, `/`)[3]
-	q.MetricRawValue = strings.Split(q.raw, `/`)[4]
-
-	return q, nil
-}
-
 func (q Query) String() string {
 	s := "==== Query ====\n\r"
 	s += fmt.Sprintf(">Raw: %s\n\r", q.raw)
@@ -31,4 +20,16 @@ func (q Query) String() string {
 	s += fmt.Sprintf(">>Value: %s\n\r", q.MetricRawValue)
 
 	return s
+}
+
+func (q Query) GetMetricaType() string {
+	return q.MetricType
+}
+
+func (q Query) GetMetricName() string {
+	return q.MetricName
+}
+
+func (q Query) GetMetricaRawValue() string {
+	return q.MetricRawValue
 }
