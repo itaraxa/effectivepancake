@@ -27,17 +27,24 @@ func UpdateMemStorageHandler(s services.Storager) http.HandlerFunc {
 			return
 		}
 		if err != nil && (errors.Is(err, myErrors.ErrBadType) || errors.Is(err, myErrors.ErrBadValue)) {
-			http.Error(w, "шnvalid type or value", http.StatusBadRequest)
+			http.Error(w, "invalid type or value", http.StatusBadRequest)
 			return
+		}
+		if err != nil {
+			http.Error(w, "unknown parse query error", http.StatusInternalServerError)
 		}
 
 		services.ShowQuery(q)
 
 		err = services.UpdateMetrica(q, s)
-		if err != nil {
-			http.Error(w, "Server error: cannot update metrica", http.StatusBadRequest)
+		if err != nil && (errors.Is(err, myErrors.ErrParseGauge) || errors.Is(err, myErrors.ErrParseCounter)) {
+			http.Error(w, "the value is not of the specified type", http.StatusBadRequest)
 			return
 		}
+		if err != nil {
+			http.Error(w, "unknown update metrica error", http.StatusInternalServerError)
+		}
+
 		services.ShowStorage(s)
 
 		// Ответ

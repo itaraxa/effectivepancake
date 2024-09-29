@@ -30,7 +30,7 @@ func UpdateMetrica(q Querier, s Storager) error {
 	case "gauge":
 		g, err := strconv.ParseFloat(q.GetMetricaRawValue(), 64)
 		if err != nil {
-			return errors.ErrParseCounter
+			return errors.ErrParseGauge
 		}
 		s.UpdateGauge(q.GetMetricName(), g)
 	case "counter":
