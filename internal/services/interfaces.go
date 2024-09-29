@@ -2,8 +2,8 @@ package services
 
 // Интерфейс для описания взаимодействия с хранилищем метрик
 type Storager interface {
-	UpdateGauge(metric_name string, value float64) error
-	AddCounter(metric_name string, value int64) error
+	UpdateGauge(metricName string, value float64) error
+	AddCounter(metricName string, value int64) error
 	String() string
 }
 

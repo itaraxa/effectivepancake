@@ -12,20 +12,20 @@ type MemStorage struct {
 	mu      sync.Mutex
 }
 
-func (m *MemStorage) UpdateGauge(metric_name string, value float64) error {
+func (m *MemStorage) UpdateGauge(metricName string, value float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.Gauge[metric_name] = value
+	m.Gauge[metricName] = value
 
 	return nil
 }
 
-func (m *MemStorage) AddCounter(metric_name string, value int64) error {
+func (m *MemStorage) AddCounter(metricName string, value int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.Counter[metric_name] = append(m.Counter[metric_name], value)
+	m.Counter[metricName] = append(m.Counter[metricName], value)
 
 	return nil
 }
