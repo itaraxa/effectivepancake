@@ -15,10 +15,10 @@ func UpdateMemStorageHandler(s services.Storager) http.HandlerFunc {
 			http.Error(w, "Only POST request allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if req.Header.Get("Content-Type") != "text/html" {
-			http.Error(w, "Only text/html content allowed", http.StatusUnsupportedMediaType)
-			return
-		}
+		// if req.Header.Get("Content-Type") != "text/html" {
+		// 	http.Error(w, "Only text/html content allowed", http.StatusUnsupportedMediaType)
+		// 	return
+		// }
 
 		// Выполнение логики
 		q, err := services.ParseQueryString(req.URL.Path)
