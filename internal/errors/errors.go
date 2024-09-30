@@ -14,4 +14,5 @@ var (
 	// Agent errors
 	ErrRequestCreating = errors.New("creating request error")
 	ErrRequestSending  = errors.New("sending request error")
+	ErrBufferIsEmpty   = errors.New("buffer on agent is empty")
 )

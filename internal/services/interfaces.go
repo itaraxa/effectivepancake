@@ -1,5 +1,7 @@
 package services
 
+import "github.com/itaraxa/effectivepancake/internal/models"
+
 // Интерфейс для описания взаимодействия с хранилищем метрик
 type Storager interface {
 	UpdateGauge(metricName string, value float64) error
@@ -12,5 +14,13 @@ type Querier interface {
 	GetMetricaType() string
 	GetMetricName() string
 	GetMetricaRawValue() string
+	String() string
+}
+
+// Интерфейс для работы с метриками на агенте
+type Metricer interface {
+	AddData(data []models.Metrica) error
+	AddPollCount(pollCount uint64) error
+
 	String() string
 }
