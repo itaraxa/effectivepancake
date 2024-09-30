@@ -1,5 +1,6 @@
 BUILD_SCRIPT = ./scripts/build.sh
-APP_NAME = cmd/server/server
+SERVER_APP_NAME = cmd/server/server
+AGENT_APP_NAME = cmd/agent/agent
 
 .PHONY: all build clean run
 
@@ -11,8 +12,10 @@ build:
 
 clean:
 	@echo "Cleaning up"
-	@rm -f $(APP_NAME)
+	@rm -f $(SERVER_APP_NAME) $(AGENT_APP_NAME)
 
 run: build
 	@echo "Running server"
-	./$(APP_NAME)
+	./$(SERVER_APP_NAME)
+	sleep 2
+	./$(AGENT_APP_NAME)
