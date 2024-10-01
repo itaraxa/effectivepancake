@@ -12,7 +12,9 @@ var (
 	ErrBadRawQuery  = errors.New("bad raw query string")
 
 	// Agent errors
-	ErrRequestCreating = errors.New("creating request error")
-	ErrRequestSending  = errors.New("sending request error")
-	ErrBufferIsEmpty   = errors.New("buffer on agent is empty")
+	ErrRequestCreating        = errors.New("creating request error")
+	ErrRequestSending         = errors.New("sending request error")
+	ErrBufferIsEmpty          = errors.New("buffer on agent is empty")
+	ErrChannelFull            = errors.New("channel in the agent is full")
+	ErrSendingMetricsToServer = errors.New("error in services.SendMetricsToServer")
 )

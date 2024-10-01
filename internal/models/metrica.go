@@ -48,3 +48,10 @@ func (ms *Metrics) AddPollCount(pollCount uint64) error {
 
 	return nil
 }
+
+func (ms *Metrics) GetData() []Metrica {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
+	return ms.Data[:]
+}

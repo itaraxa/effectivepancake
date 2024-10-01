@@ -6,21 +6,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/itaraxa/effectivepancake/internal/repositories/agentbuffer"
+	"github.com/itaraxa/effectivepancake/internal/errors"
+	"github.com/itaraxa/effectivepancake/internal/models"
 	"github.com/itaraxa/effectivepancake/internal/services"
 )
 
 func main() {
-	pollInterval := 2 * time.Second
-	reportInterval := 10 * time.Second
+	pollInterval := 1 * time.Second
+	reportInterval := 4 * time.Second
 	var wg sync.WaitGroup
+	msCh := make(chan *models.Metrics, reportInterval/pollInterval+1) // создаем канала для обмена данными между сборщиком и отправщиком
 
 	myClient := &http.Client{
 		Timeout: 1 * time.Second,
 	}
-
-	// буфер для накопления метрик на агенте
-	ab := new(agentbuffer.AgentBuffer)
 
 	// goroutine для сбора метрик
 	wg.Add(1)
@@ -28,27 +27,40 @@ func main() {
 		defer wg.Done()
 		var pollCounter uint64 = 0
 		for {
-			_, err := services.CollectMetrics(pollCounter)
+			fmt.Printf("pollCounter   = %d\n\r", pollCounter)
+			ms, err := services.CollectMetrics(pollCounter)
 			if err != nil {
 				return
 			}
+			if len(msCh) == cap(msCh) {
+				fmt.Printf("error: %v\n\r", errors.ErrChannelFull)
+			}
+			msCh <- ms
+			pollCounter += 1
 			time.Sleep(pollInterval)
 		}
 	}(pollInterval)
 
 	// goroutine для отправки метрик
 	wg.Add(1)
-	go func(reportInterval time.Duration, client *http.Client, ab *agentbuffer.AgentBuffer) {
+	go func(reportInterval time.Duration) {
 		defer wg.Done()
-
-		err := services.SendMetricsToServer(nil, "localhost:8080")
-		if err != nil {
-			return
+		var reportCounter uint64 = 0
+		for {
+			time.Sleep(reportInterval)
+			for len(msCh) > 0 {
+				fmt.Printf("reportCounter = %d\n\r", reportCounter)
+				err := services.SendMetricsToServer(<-msCh, "localhost:8080", myClient)
+				if err != nil {
+					fmt.Printf("Sending error: %v", errors.ErrSendingMetricsToServer)
+					return
+				}
+				// fmt.Println(<-msCh)
+			}
+			reportCounter++
 		}
-		time.Sleep(reportInterval)
-	}(reportInterval, myClient, ab)
+	}(reportInterval)
 
-	time.Sleep(reportInterval)
 	wg.Wait()
 	fmt.Printf("EXIT")
 

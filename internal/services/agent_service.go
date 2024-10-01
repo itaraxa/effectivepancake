@@ -2,38 +2,24 @@ package services
 
 import (
 	"fmt"
+	"io"
 	"math/rand"
+	"net/http"
+	"os"
 	"runtime"
 
+	"github.com/itaraxa/effectivepancake/internal/errors"
 	"github.com/itaraxa/effectivepancake/internal/models"
 )
 
-func SendMetricsToServer(ms *models.Metrics, serverURL string) error {
-	fmt.Printf("Server URL = %s\n\r", serverURL)
-	fmt.Println(ms.String())
-
-	// req, err := http.NewRequest("POST", fmt.Sprintf("http://localhost:8080/update/counter/%s/%d", "AgentTest", count), bytes.NewBuffer([]byte(``)))
-	// if err != nil {
-	// 	fmt.Printf("Error: %v", errors.ErrRequestCreating)
-	// 	return
-	// }
-
-	// req.Header.Set("Content-Type", "txt/plain")
-
-	// client := &http.Client{}
-	// resp, err := client.Do(req)
-	// if err != nil {
-	// 	fmt.Printf("Error: %v", errors.ErrRequestSending)
-	// 	return
-	// }
-
-	// if resp.StatusCode == http.StatusOK {
-	// 	fmt.Println("Status code = 200. Succes request")
-	// } else {
-	// 	fmt.Printf("Status code = %d", resp.StatusCode)
-	// }
-
-	// defer resp.Body.Close()
+func SendMetricsToServer(ms *models.Metrics, serverURL string, client *http.Client) error {
+	for _, m := range ms.GetData() {
+		req, err := client.Post(fmt.Sprintf("http://%s/update/%s/%s/%s", serverURL, m.Type, m.Name, m.Value), "text/plain", nil)
+		if err != nil {
+			return errors.ErrSendingMetricsToServer
+		}
+		io.Copy(os.Stdout, req.Body)
+	}
 
 	return nil
 }
