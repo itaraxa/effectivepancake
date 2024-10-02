@@ -16,6 +16,7 @@ func main() {
 	reportInterval := 4 * time.Second
 	var wg sync.WaitGroup
 	msCh := make(chan *models.Metrics, reportInterval/pollInterval+1) // создаем канала для обмена данными между сборщиком и отправщиком
+	defer close(msCh)
 
 	myClient := &http.Client{
 		Timeout: 1 * time.Second,

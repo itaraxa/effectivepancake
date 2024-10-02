@@ -19,6 +19,7 @@ func SendMetricsToServer(ms *models.Metrics, serverURL string, client *http.Clie
 			return errors.ErrSendingMetricsToServer
 		}
 		io.Copy(os.Stdout, req.Body)
+		req.Body.Close()
 	}
 
 	return nil
