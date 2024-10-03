@@ -3,6 +3,8 @@ package main
 import (
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/itaraxa/effectivepancake/internal/handlers"
 	"github.com/itaraxa/effectivepancake/internal/repositories/memstorage"
 )
@@ -13,10 +15,14 @@ func main() {
 		Counter: make(map[string][]int64),
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc(`/update/`, handlers.UpdateMemStorageHandler(ms))
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
 
-	err := http.ListenAndServe(`:8080`, mux)
+	r.Get(`/`, handlers.GetAllCurrentMetrics(ms))
+	r.Get(`/value/{type}/{name}`, handlers.GetMetrica(ms))
+	r.Post(`/update/*`, handlers.UpdateMemStorageHandler(ms))
+
+	err := http.ListenAndServe(`:8080`, r)
 	if err != nil {
 		panic(err)
 	}

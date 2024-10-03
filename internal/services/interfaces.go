@@ -6,6 +6,7 @@ import "github.com/itaraxa/effectivepancake/internal/models"
 type Storager interface {
 	UpdateGauge(metricName string, value float64) error
 	AddCounter(metricName string, value int64) error
+	GetMetrica(metricaType string, metricaName string) (string, error)
 	String() string
 }
 

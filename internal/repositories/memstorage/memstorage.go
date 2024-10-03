@@ -3,6 +3,8 @@ package memstorage
 import (
 	"fmt"
 	"sync"
+
+	"github.com/itaraxa/effectivepancake/internal/errors"
 )
 
 // Структура для хранения метрик в памяти
@@ -28,6 +30,28 @@ func (m *MemStorage) AddCounter(metricName string, value int64) error {
 	m.Counter[metricName] = append(m.Counter[metricName], value)
 
 	return nil
+}
+
+func (m *MemStorage) GetMetrica(metricaType string, metricaName string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	switch metricaType {
+	case "gauge":
+		if _, ok := m.Gauge[metricaName]; !ok {
+			return "", errors.ErrMetricaNotFaund
+		}
+		return fmt.Sprintf("%f", m.Gauge[metricaName]), nil
+
+	case "counter":
+		if _, ok := m.Counter[metricaName]; !ok {
+			return "", errors.ErrMetricaNotFaund
+		}
+		return fmt.Sprintf("%v", m.Counter[metricaName]), nil
+
+	default:
+		return "", errors.ErrMetricaNotFaund
+	}
 }
 
 func (m *MemStorage) String() string {
