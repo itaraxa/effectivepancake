@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/itaraxa/effectivepancake/internal/handlers"
@@ -30,11 +32,28 @@ func NewServerApp(logger *slog.Logger, storage *memstorage.MemStorage, router *c
 func (sa *ServerApp) Run() {
 	sa.logger.Info("Server started")
 	defer sa.logger.Info("Server stoped")
+
+	// Ctrl+C handling
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, os.Interrupt)
+	go func() {
+		<-signalChan
+		// Wait for closing requests
+		time.Sleep(1 * time.Second)
+		sa.logger.Info("Exit programm because Ctrl+C press")
+		os.Exit(0)
+	}()
+
+	// Add middleware
 	sa.router.Use(middlewares.LoggerMiddleware(sa.logger))
 	sa.router.Use(middlewares.StatMiddleware(sa.logger, 10))
+
+	// Add routes
 	sa.router.Get(`/`, handlers.GetAllCurrentMetrics(sa.storage))
 	sa.router.Get(`/value/{type}/{name}`, handlers.GetMetrica(sa.storage))
 	sa.router.Post(`/update/*`, handlers.UpdateMemStorageHandler(sa.storage))
+
+	// Start router
 	sa.logger.Info("Start router")
 	err := http.ListenAndServe(`:8080`, sa.router)
 	if err != nil {
@@ -52,4 +71,5 @@ func main() {
 
 	app := NewServerApp(logger, ms, r)
 	app.Run()
+
 }
