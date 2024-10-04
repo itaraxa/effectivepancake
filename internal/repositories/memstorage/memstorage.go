@@ -10,7 +10,7 @@ import (
 // Структура для хранения метрик в памяти
 type MemStorage struct {
 	Gauge   map[string]float64
-	Counter map[string][]int64
+	Counter map[string]int64
 	mu      sync.Mutex
 }
 
@@ -27,7 +27,7 @@ func (m *MemStorage) AddCounter(metricName string, value int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.Counter[metricName] = append(m.Counter[metricName], value)
+	m.Counter[metricName] += value
 
 	return nil
 }
@@ -123,7 +123,7 @@ func (m *MemStorage) HTML() string {
 		h += fmt.Sprintf("<tr><td>%s</td><td>%f</td></tr>", metrica, value)
 	}
 	for metrica, value := range m.Counter {
-		h += fmt.Sprintf("<tr><td>%s</td><td>%d</td></tr>", metrica, value[len(value)-1])
+		h += fmt.Sprintf("<tr><td>%s</td><td>%d</td></tr>", metrica, value)
 	}
 
 	h += `        </tbody>
@@ -138,6 +138,6 @@ func (m *MemStorage) HTML() string {
 func NewMemStorage() *MemStorage {
 	return &MemStorage{
 		Gauge:   make(map[string]float64),
-		Counter: make(map[string][]int64),
+		Counter: make(map[string]int64),
 	}
 }
