@@ -41,13 +41,13 @@ func (m *MemStorage) GetMetrica(metricaType string, metricaName string) (string,
 		if _, ok := m.Gauge[metricaName]; !ok {
 			return "", errors.ErrMetricaNotFaund
 		}
-		return fmt.Sprintf("%f", m.Gauge[metricaName]), nil
+		return fmt.Sprintf("%g", m.Gauge[metricaName]), nil
 
 	case "counter":
 		if _, ok := m.Counter[metricaName]; !ok {
 			return "", errors.ErrMetricaNotFaund
 		}
-		return fmt.Sprintf("%v", m.Counter[metricaName]), nil
+		return fmt.Sprintf("%d", m.Counter[metricaName]), nil
 
 	default:
 		return "", errors.ErrMetricaNotFaund
@@ -61,7 +61,7 @@ func (m *MemStorage) String() string {
 	s := "==== MemStorage ====\n\r"
 	s += "<Gauge:\n\r"
 	for metric, value := range m.Gauge {
-		s += fmt.Sprintf("<<%s: %f\n\r", metric, value)
+		s += fmt.Sprintf("<<%s: %g\n\r", metric, value)
 	}
 	s += "<Counter:\n\r"
 	for metric, values := range m.Counter {
@@ -120,7 +120,7 @@ func (m *MemStorage) HTML() string {
         <tbody>`
 
 	for metrica, value := range m.Gauge {
-		h += fmt.Sprintf("<tr><td>%s</td><td>%f</td></tr>", metrica, value)
+		h += fmt.Sprintf("<tr><td>%s</td><td>%g</td></tr>", metrica, value)
 	}
 	for metrica, value := range m.Counter {
 		h += fmt.Sprintf("<tr><td>%s</td><td>%d</td></tr>", metrica, value)
