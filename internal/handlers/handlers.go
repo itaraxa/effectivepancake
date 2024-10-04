@@ -81,7 +81,7 @@ func UpdateMemStorageHandler(s services.Storager) http.HandlerFunc {
 			http.Error(w, "unknown update metrica error", http.StatusInternalServerError)
 		}
 
-		services.ShowStorage(s)
+		// services.ShowStorage(s)
 
 		// Ответ
 		w.Header().Set("content-type", "text/html")

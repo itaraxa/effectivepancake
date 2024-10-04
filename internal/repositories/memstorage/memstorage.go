@@ -69,3 +69,10 @@ func (m *MemStorage) String() string {
 	}
 	return s
 }
+
+func NewMemStorage() *MemStorage {
+	return &MemStorage{
+		Gauge:   make(map[string]float64),
+		Counter: make(map[string][]int64),
+	}
+}
