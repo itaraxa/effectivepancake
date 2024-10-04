@@ -32,7 +32,7 @@ func LoggerMiddleware(logger *slog.Logger) func(next http.Handler) http.Handler 
 			)
 
 			// Doing next middleware
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(wrappedWriter, r)
 
 			// Response
 			logger.Debug("Request completed",
@@ -75,7 +75,7 @@ func StatMiddleware(logger *slog.Logger, logInterval int) func(next http.Handler
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			wrappedWriter := &responseWriterWrapper{ResponseWriter: w, statusCode: http.StatusOK}
 			stat := NewMyStatRes()
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(wrappedWriter, r)
 			stat.mu.Lock()
 			defer stat.mu.Unlock()
 			stat.counter += 1
