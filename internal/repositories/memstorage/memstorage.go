@@ -70,6 +70,71 @@ func (m *MemStorage) String() string {
 	return s
 }
 
+func (m *MemStorage) HTML() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	h := `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metrics Table</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 40px;
+        }
+        table {
+            width: 70%;
+            margin: 0 auto;
+            border-collapse: collapse;
+            background-color: #fff;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+    </style>
+</head>
+<body>
+
+    <h2 style="text-align:center;">Metrics Table</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Metric Name</th>
+                <th>Metric Value</th>
+            </tr>
+        </thead>
+        <tbody>`
+
+	for metrica, value := range m.Gauge {
+		h += fmt.Sprintf("<tr><td>%s</td><td>%f</td></tr>", metrica, value)
+	}
+	for metrica, value := range m.Counter {
+		h += fmt.Sprintf("<tr><td>%s</td><td>%d</td></tr>", metrica, value[len(value)-1])
+	}
+
+	h += `        </tbody>
+    </table>
+
+</body>
+</html>
+`
+	return h
+}
+
 func NewMemStorage() *MemStorage {
 	return &MemStorage{
 		Gauge:   make(map[string]float64),

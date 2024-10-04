@@ -8,6 +8,7 @@ type Storager interface {
 	AddCounter(metricName string, value int64) error
 	GetMetrica(metricaType string, metricaName string) (string, error)
 	String() string
+	HTML() string
 }
 
 // Интерфейс для описания взаимодействия с запросом на обновление метрики

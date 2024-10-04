@@ -19,10 +19,10 @@ func GetAllCurrentMetrics(s services.Storager) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("content-type", "text/plain")
+		w.Header().Set("content-type", "text/html")
 		w.WriteHeader(http.StatusOK)
 
-		w.Write([]byte(s.String()))
+		w.Write([]byte(s.HTML()))
 	}
 }
 
