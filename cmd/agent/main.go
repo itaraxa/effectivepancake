@@ -1,8 +1,10 @@
 package main
 
 import (
-	"fmt"
+	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
 	"sync"
 	"time"
 
@@ -11,16 +13,48 @@ import (
 	"github.com/itaraxa/effectivepancake/internal/services"
 )
 
-func main() {
-	pollInterval := 1 * time.Second
-	reportInterval := 4 * time.Second
+type AgentApp struct {
+	logger     *slog.Logger
+	httpClient *http.Client
+	config     *struct {
+		pollInterval   time.Duration
+		reportInterval time.Duration
+		addressServer  string
+	}
+	wg *sync.WaitGroup
+}
+
+func NewAgentApp(logger *slog.Logger, httpClient *http.Client, config *struct {
+	pollInterval   time.Duration
+	reportInterval time.Duration
+	addressServer  string
+}) *AgentApp {
+	return &AgentApp{
+		logger:     logger,
+		httpClient: httpClient,
+		config:     config,
+		wg:         new(sync.WaitGroup),
+	}
+}
+
+func (aa *AgentApp) Run() {
+	aa.logger.Info("Agent started", slog.String("server", aa.config.addressServer))
+	defer aa.logger.Info("Agent stopped")
+
 	var wg sync.WaitGroup
-	msCh := make(chan *models.Metrics, reportInterval/pollInterval+1) // создаем канала для обмена данными между сборщиком и отправщиком
+	msCh := make(chan *models.Metrics, aa.config.reportInterval/aa.config.pollInterval+1) // создаем канал для обмена данными между сборщиком и отправщиком
 	defer close(msCh)
 
-	myClient := &http.Client{
-		Timeout: 1 * time.Second,
-	}
+	// Ctrl+C handling
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, os.Interrupt)
+	go func() {
+		<-signalChan
+		// Wait for closing requests
+		time.Sleep(1 * time.Second)
+		aa.logger.Info("Agent stopped", slog.String("reason", "Ctrl+C press"))
+		os.Exit(0)
+	}()
 
 	// goroutine для сбора метрик
 	wg.Add(1)
@@ -28,19 +62,19 @@ func main() {
 		defer wg.Done()
 		var pollCounter uint64 = 0
 		for {
-			fmt.Printf("pollCounter   = %d\n\r", pollCounter)
+			aa.logger.Debug("Poll counter", slog.Uint64("Value", pollCounter))
 			ms, err := services.CollectMetrics(pollCounter)
 			if err != nil {
-				return
+				aa.logger.Error("Error collect metrics", slog.String("error", err.Error()))
 			}
 			if len(msCh) == cap(msCh) {
-				fmt.Printf("error: %v\n\r", errors.ErrChannelFull)
+				aa.logger.Error("Error internal commnication", slog.String("error", errors.ErrChannelFull.Error()))
 			}
 			msCh <- ms
 			pollCounter += 1
 			time.Sleep(pollInterval)
 		}
-	}(pollInterval)
+	}(aa.config.pollInterval)
 
 	// goroutine для отправки метрик
 	wg.Add(1)
@@ -50,19 +84,40 @@ func main() {
 		for {
 			time.Sleep(reportInterval)
 			for len(msCh) > 0 {
-				fmt.Printf("reportCounter = %d\n\r", reportCounter)
-				err := services.SendMetricsToServer(<-msCh, "localhost:8080", myClient)
+				aa.logger.Debug("Report counter", slog.Uint64("Value", reportCounter))
+				err := services.SendMetricsToServer(<-msCh, aa.config.addressServer, aa.httpClient)
 				if err != nil {
-					fmt.Printf("Sending error: %v", errors.ErrSendingMetricsToServer)
-					return
+					aa.logger.Error("Error sending to server. Waiting 1 second",
+						slog.String("server", aa.config.addressServer),
+						slog.String("error", errors.ErrSendingMetricsToServer.Error()),
+					)
+					// Pause for next sending
+					time.Sleep(1 * time.Second)
 				}
-				// fmt.Println(<-msCh)
 			}
 			reportCounter++
 		}
-	}(reportInterval)
+	}(aa.config.reportInterval)
 
 	wg.Wait()
-	fmt.Printf("EXIT")
+	aa.logger.Info("Agent stopped")
+}
 
+func main() {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	config := struct {
+		pollInterval   time.Duration
+		reportInterval time.Duration
+		addressServer  string
+	}{
+		pollInterval:   1 * time.Second,
+		reportInterval: 2 * time.Second,
+		addressServer:  `localhost:8080`,
+	}
+	myClient := &http.Client{
+		Timeout: 1 * time.Second,
+	}
+
+	app := NewAgentApp(logger, myClient, &config)
+	app.Run()
 }
