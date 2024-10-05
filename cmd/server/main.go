@@ -14,23 +14,27 @@ import (
 	"github.com/itaraxa/effectivepancake/internal/repositories/memstorage"
 )
 
+var version string = "0.1.0"
+
 type ServerApp struct {
-	logger  *slog.Logger
-	storage *memstorage.MemStorage
-	router  *chi.Mux
+	logger   *slog.Logger
+	storage  *memstorage.MemStorage
+	router   *chi.Mux
+	endpoint string
 }
 
 // Можно ли тут использовать интерфейсы? Как?
-func NewServerApp(logger *slog.Logger, storage *memstorage.MemStorage, router *chi.Mux) *ServerApp {
+func NewServerApp(logger *slog.Logger, storage *memstorage.MemStorage, router *chi.Mux, endpoint string) *ServerApp {
 	return &ServerApp{
-		logger:  logger,
-		storage: storage,
-		router:  router,
+		logger:   logger,
+		storage:  storage,
+		router:   router,
+		endpoint: endpoint,
 	}
 }
 
 func (sa *ServerApp) Run() {
-	sa.logger.Info("Server started")
+	sa.logger.Info("Server started", slog.String(`Listen`, sa.endpoint))
 	defer sa.logger.Info("Server stoped")
 
 	// Ctrl+C handling
@@ -55,7 +59,7 @@ func (sa *ServerApp) Run() {
 
 	// Start router
 	sa.logger.Info("Start router")
-	err := http.ListenAndServe(`:8080`, sa.router)
+	err := http.ListenAndServe(sa.endpoint, sa.router)
 	if err != nil {
 		sa.logger.Error(fmt.Sprintf("router error: %v", err))
 		os.Exit(1)
@@ -63,13 +67,14 @@ func (sa *ServerApp) Run() {
 }
 
 func main() {
+	parseFlags()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	ms := memstorage.NewMemStorage()
 
 	r := chi.NewRouter()
 
-	app := NewServerApp(logger, ms, r)
+	app := NewServerApp(logger, ms, r, config.endpoint)
 	app.Run()
 
 }
