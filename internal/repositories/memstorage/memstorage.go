@@ -14,6 +14,18 @@ type MemStorage struct {
 	mu      sync.Mutex
 }
 
+/*
+Update gauge value of metrica into MemStorage. If not exists - value will be created, else - updated
+
+Args:
+
+	metricName string: metrica name
+	value float64: metrica value
+
+Returns:
+
+	error: nil or error of adding counter to the MemStorgage
+*/
 func (m *MemStorage) UpdateGauge(metricName string, value float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -23,6 +35,18 @@ func (m *MemStorage) UpdateGauge(metricName string, value float64) error {
 	return nil
 }
 
+/*
+Add counter value of metrica to MemStorage. If exists - value will be added
+
+Args:
+
+	metricName string: metrica name
+	value int64: metrica value
+
+Returns:
+
+	error: nil or error of adding counter to the MemStorgage
+*/
 func (m *MemStorage) AddCounter(metricName string, value int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -32,6 +56,19 @@ func (m *MemStorage) AddCounter(metricName string, value int64) error {
 	return nil
 }
 
+/*
+Get metrica value grom MemStorage by metrica name
+
+Args:
+
+	metricaType string: type of requested metrica. Should be "gauge" or "counter"
+	metricaName string: name of requested metrica
+
+Returns:
+
+	string: value of metrica in the string representation
+	error: nil or error if metrica was not found in the MemStorage
+*/
 func (m *MemStorage) GetMetrica(metricaType string, metricaName string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -50,26 +87,52 @@ func (m *MemStorage) GetMetrica(metricaType string, metricaName string) (string,
 		return fmt.Sprintf("%d", m.Counter[metricaName]), nil
 
 	default:
+		// case with uncorrect type of metrica
 		return "", errors.ErrMetricaNotFaund
 	}
 }
 
+/*
+Get string representation of the current state the MemStorage.
+
+Returns:
+
+	string: string representation of the current state the MemStorage
+
+Output example:
+
+	==== MemStorage ====
+	       Gauge:
+	Gauge1: 3.14
+	Gauge2: 14.88
+	Gauge3: 0.0
+	      Counter:
+	Counter1: 1
+	Counter2: 42
+*/
 func (m *MemStorage) String() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	s := "==== MemStorage ====\n\r"
-	s += "<Gauge:\n\r"
+	s += "       Gauge:\n\r"
 	for metric, value := range m.Gauge {
-		s += fmt.Sprintf("<<%s: %g\n\r", metric, value)
+		s += fmt.Sprintf("%s: %g\n\r", metric, value)
 	}
-	s += "<Counter:\n\r"
+	s += "      Counter:\n\r"
 	for metric, values := range m.Counter {
-		s += fmt.Sprintf("<<%s: %v\n\r", metric, values)
+		s += fmt.Sprintf("%s: %d\n\r", metric, values)
 	}
 	return s
 }
 
+/*
+Get html representation of the current state the MemStorage
+
+Returns:
+
+	string: html representation of the current state the MemStorage
+*/
 func (m *MemStorage) HTML() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -135,6 +198,13 @@ func (m *MemStorage) HTML() string {
 	return h
 }
 
+/*
+Create and return an instance of the memstorage object
+
+Returns:
+
+	*MemStorage: new instance of the MemStorage
+*/
 func NewMemStorage() *MemStorage {
 	return &MemStorage{
 		Gauge:   make(map[string]float64),
