@@ -15,7 +15,7 @@ import (
 )
 
 // Version code: <sprint>.<increment>.<extra>
-var version string = "1.4.0"
+var version string = "1.5.0"
 
 type ServerApp struct {
 	logger   *slog.Logger
