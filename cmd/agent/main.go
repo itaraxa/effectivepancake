@@ -13,6 +13,8 @@ import (
 	"github.com/itaraxa/effectivepancake/internal/services"
 )
 
+var version string = "0.1.0"
+
 type AgentApp struct {
 	logger     *slog.Logger
 	httpClient *http.Client
@@ -104,16 +106,18 @@ func (aa *AgentApp) Run() {
 }
 
 func main() {
+	parseFlags()
+
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	config := struct {
-		pollInterval   time.Duration
-		reportInterval time.Duration
-		addressServer  string
-	}{
-		pollInterval:   1 * time.Second,
-		reportInterval: 2 * time.Second,
-		addressServer:  `localhost:8080`,
-	}
+	// config := struct {
+	// 	pollInterval   time.Duration
+	// 	reportInterval time.Duration
+	// 	addressServer  string
+	// }{
+	// 	pollInterval:   1 * time.Second,
+	// 	reportInterval: 2 * time.Second,
+	// 	addressServer:  `localhost:8080`,
+	// }
 	myClient := &http.Client{
 		Timeout: 1 * time.Second,
 	}
