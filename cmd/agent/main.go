@@ -13,7 +13,7 @@ import (
 	"github.com/itaraxa/effectivepancake/internal/services"
 )
 
-var version string = "0.1.0"
+var version string = "1.4.0"
 
 type AgentApp struct {
 	logger     *slog.Logger

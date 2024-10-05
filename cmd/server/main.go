@@ -14,7 +14,8 @@ import (
 	"github.com/itaraxa/effectivepancake/internal/repositories/memstorage"
 )
 
-var version string = "0.1.0"
+// Version code: <sprint>.<increment>.<extra>
+var version string = "1.4.0"
 
 type ServerApp struct {
 	logger   *slog.Logger
@@ -23,7 +24,6 @@ type ServerApp struct {
 	endpoint string
 }
 
-// Можно ли тут использовать интерфейсы? Как?
 func NewServerApp(logger *slog.Logger, storage *memstorage.MemStorage, router *chi.Mux, endpoint string) *ServerApp {
 	return &ServerApp{
 		logger:   logger,
@@ -76,5 +76,4 @@ func main() {
 
 	app := NewServerApp(logger, ms, r, config.endpoint)
 	app.Run()
-
 }
