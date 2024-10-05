@@ -107,6 +107,7 @@ func (aa *AgentApp) Run() {
 
 func main() {
 	parseFlags()
+	parseEnv()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	// config := struct {
