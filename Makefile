@@ -7,7 +7,7 @@ AGENT_APP_NAME = cmd/agent/agent
 all: build
 
 build:
-	@echo "Building the server"
+	@echo "Building the server and agent binary"
 	$(BUILD_SCRIPT)
 
 clean:
@@ -16,6 +16,7 @@ clean:
 
 run: build
 	@echo "Running server"
-	./$(SERVER_APP_NAME)
+	./$(SERVER_APP_NAME) &
 	sleep 2
+	@echo "Running agent"
 	./$(AGENT_APP_NAME)
