@@ -8,17 +8,41 @@ import (
 	"time"
 )
 
+/*
+Helper structure for the middleware function
+*/
 type responseWriterWrapper struct {
 	http.ResponseWriter
 	statusCode int
 }
 
+/*
+Overriding the writeHeader function to return the status code via a responseWriterWrapper structur
+
+Args:
+
+	statusCode int: status of processing request
+
+Returns:
+
+	None
+*/
 func (rw *responseWriterWrapper) WriteHeader(statusCode int) {
 	rw.statusCode = statusCode
 	rw.ResponseWriter.WriteHeader(statusCode)
 }
 
-// Logging requests via slog logger
+/*
+Middleware function for logging requests
+
+Args:
+
+	logger *slog.logger: pointer to logger
+
+Returns:
+
+	func(next http.Handler) http.Handler
+*/
 func LoggerMiddleware(logger *slog.Logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -45,6 +69,9 @@ func LoggerMiddleware(logger *slog.Logger) func(next http.Handler) http.Handler 
 	}
 }
 
+/*
+Storage stat about requests
+*/
 type statResponse struct {
 	statType map[string]int
 	statCode map[int]int
@@ -52,13 +79,27 @@ type statResponse struct {
 	counter  int
 }
 
+/*
+Singletone var for stat storage
+*/
 var (
 	myStatResponse *statResponse
 	once           sync.Once
 )
 
-// Function for creating singleton of statResponse
+/*
+Creating stat storage. If a stat storage exist - return  the pointer to existing stat storage
+
+Args:
+
+	None
+
+Returns:
+
+	*statResponse: pointer to the statResponse struct
+*/
 func NewMyStatRes() *statResponse {
+	// concarancy-safe realisation of singleton
 	once.Do(func() {
 		myStatResponse = &statResponse{
 			statType: map[string]int{},
@@ -69,7 +110,18 @@ func NewMyStatRes() *statResponse {
 	return myStatResponse
 }
 
-// Show stats into logger
+/*
+Middleware function for gathering statistics about requests. Collect status and type of requests. Print to logger stats every logInterval requests
+
+Args:
+
+	logger *slog.Logger: the logger for outputting stat information
+	logInterval int: the number of requests to output information after
+
+Returns:
+
+	func(next http.Handler) http.Handler
+*/
 func StatMiddleware(logger *slog.Logger, logInterval int) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
