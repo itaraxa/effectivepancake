@@ -1,7 +1,6 @@
 package memstorage
 
 import (
-	"sync"
 	"testing"
 )
 
@@ -9,7 +8,6 @@ func TestMemStorage_UpdateGauge(t *testing.T) {
 	type fields struct {
 		Gauge   map[string]float64
 		Counter map[string]int64
-		mu      sync.Mutex
 	}
 	type args struct {
 		metricName string
@@ -69,7 +67,6 @@ func TestMemStorage_UpdateGauge(t *testing.T) {
 			m := &MemStorage{
 				Gauge:   tt.fields.Gauge,
 				Counter: tt.fields.Counter,
-				mu:      tt.fields.mu,
 			}
 			if err := m.UpdateGauge(tt.args.metricName, tt.args.value); (err != nil) != tt.wantErr {
 				t.Errorf("MemStorage.UpdateGauge() error = %v, wantErr %v", err, tt.wantErr)
@@ -82,7 +79,6 @@ func TestMemStorage_AddCounter(t *testing.T) {
 	type fields struct {
 		Gauge   map[string]float64
 		Counter map[string]int64
-		mu      sync.Mutex
 	}
 	type args struct {
 		metricName string
@@ -151,7 +147,6 @@ func TestMemStorage_AddCounter(t *testing.T) {
 			m := &MemStorage{
 				Gauge:   tt.fields.Gauge,
 				Counter: tt.fields.Counter,
-				mu:      tt.fields.mu,
 			}
 			if err := m.AddCounter(tt.args.metricName, tt.args.value); (err != nil) != tt.wantErr {
 				t.Errorf("MemStorage.AddCounter() error = %v, wantErr %v", err, tt.wantErr)
@@ -164,7 +159,6 @@ func TestMemStorage_GetMetrica(t *testing.T) {
 	type fields struct {
 		Gauge   map[string]float64
 		Counter map[string]int64
-		mu      sync.Mutex
 	}
 	type args struct {
 		metricaType string
@@ -216,7 +210,6 @@ func TestMemStorage_GetMetrica(t *testing.T) {
 			m := &MemStorage{
 				Gauge:   tt.fields.Gauge,
 				Counter: tt.fields.Counter,
-				mu:      tt.fields.mu,
 			}
 			got, err := m.GetMetrica(tt.args.metricaType, tt.args.metricaName)
 			if (err != nil) != tt.wantErr {
