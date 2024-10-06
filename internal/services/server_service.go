@@ -8,7 +8,18 @@ import (
 	"github.com/itaraxa/effectivepancake/internal/models"
 )
 
-// Функция для создания query
+/*
+Creating new instance of models.Query from request.URL string
+
+Args:
+
+	raw string: request.URL in string format. Example: "/update/gauge/test1/3.14"
+
+Returns:
+
+	q models.Query: copy of instance models.Query
+	err error: nil or error occurred while parsing the raw string
+*/
 func ParseQueryString(raw string) (q models.Query, err error) {
 	queryString := raw[1:]
 	if len(strings.Split(queryString, `/`)) != 4 {
@@ -24,7 +35,18 @@ func ParseQueryString(raw string) (q models.Query, err error) {
 	return q, nil
 }
 
-// Функция для обновления метрики из запроса в репозитории
+/*
+Writing data from the instance models.Query to storage.
+
+Args:
+
+	q Querier: object, implementing Querier interface
+	s Storager: object, implementing Storager interface
+
+Returns:
+
+	error: nil or error, if occurred
+*/
 func UpdateMetrica(q Querier, s Storager) error {
 	switch q.GetMetricaType() {
 	case "gauge":
@@ -32,6 +54,7 @@ func UpdateMetrica(q Querier, s Storager) error {
 		if err != nil {
 			return errors.ErrParseGauge
 		}
+		// In Storager save value as int64/float64 type
 		s.UpdateGauge(q.GetMetricName(), g)
 	case "counter":
 		c, err := strconv.Atoi(q.GetMetricaRawValue())

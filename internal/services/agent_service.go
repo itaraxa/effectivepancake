@@ -5,26 +5,54 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
-	"os"
 	"runtime"
 
 	"github.com/itaraxa/effectivepancake/internal/errors"
 	"github.com/itaraxa/effectivepancake/internal/models"
 )
 
+/*
+Sending metrica data to server via http
+
+Args:
+
+	ms *models.Metrics: pointer to models.Metrics object, which store metrica data
+	serverURL string: endpoint of server
+	client *http.Client: pointer to httpClient object, which uses for connection to server
+
+Returns:
+
+	error: nil or error, encountered during sending data
+*/
 func SendMetricsToServer(ms *models.Metrics, serverURL string, client *http.Client) error {
 	for _, m := range ms.GetData() {
-		req, err := client.Post(fmt.Sprintf("http://%s/update/%s/%s/%s", serverURL, m.Type, m.Name, m.Value), "text/plain", nil)
+		res, err := client.Post(fmt.Sprintf("http://%s/update/%s/%s/%s", serverURL, m.Type, m.Name, m.Value), "text/plain", nil)
 		if err != nil {
 			return errors.ErrSendingMetricsToServer
 		}
-		io.Copy(os.Stdout, req.Body)
-		req.Body.Close()
+		// Reading response body to the end to Close body and release the TCP-connection
+		_, err = io.Copy(io.Discard, res.Body)
+		res.Body.Close()
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
+/*
+Collecting metrics. This function agregates and executes all ways for collecting metrica
+
+Args:
+
+	pollCount uint64: count for writing to PollCount metrica
+
+Returns:
+
+	*models.Metrica: pointer to models.Metrics structure, which store metrica data on Agent
+	error: nil
+*/
 func CollectMetrics(pollCount uint64) (*models.Metrics, error) {
 	ms := &models.Metrics{}
 
@@ -35,6 +63,45 @@ func CollectMetrics(pollCount uint64) (*models.Metrics, error) {
 	return ms, nil
 }
 
+/*
+Collecting metrics from runtime package.
+Collected metrics:
+  - Alloc
+  - BuckHashSys
+  - Frees
+  - GCCPUFraction
+  - GCSys
+  - HeapAlloc
+  - HeapIdle
+  - HeapInuse
+  - HeapObjects
+  - HeapReleased
+  - HeapSys
+  - LastGC
+  - Lookups
+  - MCacheInuse
+  - MCacheSys
+  - MSpanInuse
+  - MSpanSys
+  - Mallocs
+  - NextGC
+  - NumForcedGC
+  - NumGC
+  - OtherSys
+  - PauseTotalNs
+  - StackInuse
+  - StackSys
+  - Sys
+  - TotalAlloc
+
+Args:
+
+	None
+
+Returns:
+
+	[]models.Metrica: slice of models.Metrica objects
+*/
 func collectRuntimeMetrics() []models.Metrica {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
@@ -71,6 +138,19 @@ func collectRuntimeMetrics() []models.Metrica {
 	return out
 }
 
+/*
+Collecting other metrics.
+Other metrics:
+  - random value
+
+Args:
+
+	None
+
+Returns:
+
+	[]models.Metrica: slice of models.Metrica objects
+*/
 func collectOtherMetrics() []models.Metrica {
 	out := []models.Metrica{}
 
