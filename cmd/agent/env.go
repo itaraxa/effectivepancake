@@ -19,7 +19,7 @@ func parseEnv() {
 	if ok {
 		ri, err := strconv.Atoi(r)
 		if err != nil {
-			config.pollInterval = time.Duration(ri) * time.Second
+			config.reportInterval = time.Duration(ri) * time.Second
 		}
 	}
 

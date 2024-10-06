@@ -40,7 +40,11 @@ func NewAgentApp(logger *slog.Logger, httpClient *http.Client, config *struct {
 }
 
 func (aa *AgentApp) Run() {
-	aa.logger.Info("Agent started", slog.String("server", aa.config.addressServer))
+	aa.logger.Info("Agent started",
+		slog.String("server", aa.config.addressServer),
+		slog.Duration("poll interval", aa.config.pollInterval),
+		slog.Duration("report interval", aa.config.reportInterval),
+	)
 	defer aa.logger.Info("Agent stopped")
 
 	var wg sync.WaitGroup
@@ -106,19 +110,13 @@ func (aa *AgentApp) Run() {
 }
 
 func main() {
+	// Preparing the configuration for Agent app startup
 	parseFlags()
 	parseEnv()
 
+	// Creating dependencies
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	// config := struct {
-	// 	pollInterval   time.Duration
-	// 	reportInterval time.Duration
-	// 	addressServer  string
-	// }{
-	// 	pollInterval:   1 * time.Second,
-	// 	reportInterval: 2 * time.Second,
-	// 	addressServer:  `localhost:8080`,
-	// }
+
 	myClient := &http.Client{
 		Timeout: 1 * time.Second,
 	}
