@@ -17,8 +17,6 @@ func parseFlags() {
 	var showVersion bool
 	flag.BoolVar(&showVersion, `v`, false, `Show version and exit`)
 	flag.StringVar(&config.addressServer, `a`, `localhost:8080`, `HTTP-server endpoint address`)
-	// flag.DurationVar(&config.pollInterval, `p`, 2*time.Second, `metrics poll interval`)
-	// flag.DurationVar(&config.reportInterval, `r`, 10*time.Second, `metrics report interval`)
 	var p, r int64
 	flag.Int64Var(&p, `p`, 2, `metrics poll interval, seconds`)
 	flag.Int64Var(&r, `r`, 10, `metrics report interval, seconds`)
