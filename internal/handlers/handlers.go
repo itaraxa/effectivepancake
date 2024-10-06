@@ -10,7 +10,15 @@ import (
 )
 
 /*
-Метод для вывода всех метрик по GET запросу к корню
+Wrapper function for handler, what return all metrica values in HTML view
+
+Args:
+
+	s services.Storager: An object implementing the service.Storager interface
+
+Returns:
+
+	http.HandlerFunc
 */
 func GetAllCurrentMetrics(s services.Storager) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
@@ -27,7 +35,15 @@ func GetAllCurrentMetrics(s services.Storager) http.HandlerFunc {
 }
 
 /*
-Хэндлер для получения метрики по запросу
+Wrapper function for handler, which return metrica value
+
+Args:
+
+	s services.Storager: An object implementing the service.Storager interface
+
+Returns:
+
+	http.HandlerFunc
 */
 func GetMetrica(s services.Storager) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
@@ -36,6 +52,7 @@ func GetMetrica(s services.Storager) http.HandlerFunc {
 		v, err := s.GetMetrica(chi.URLParam(req, "type"), chi.URLParam(req, "name"))
 		if err != nil {
 			w.WriteHeader(http.StatusNotFound)
+			// TO-DO: add error reporting into logger
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -43,19 +60,26 @@ func GetMetrica(s services.Storager) http.HandlerFunc {
 	}
 }
 
+/*
+Wrapper function for handler: writing the metric value to the storage
+
+Args:
+
+	s services.Storager: An object implementing the service.Storager interface
+
+Returns:
+
+	http.HandlerFunc
+*/
 func UpdateMemStorageHandler(s services.Storager) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		// Проверки запроса
+		// Checks
 		if req.Method != http.MethodPost {
 			http.Error(w, "Only POST request allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		// if req.Header.Get("Content-Type") != "text/html" {
-		// 	http.Error(w, "Only text/html content allowed", http.StatusUnsupportedMediaType)
-		// 	return
-		// }
 
-		// Выполнение логики
+		// Processing
 		q, err := services.ParseQueryString(req.URL.Path)
 		if err != nil && errors.Is(err, myErrors.ErrBadRawQuery) {
 			services.ShowQuery(q)
@@ -81,9 +105,7 @@ func UpdateMemStorageHandler(s services.Storager) http.HandlerFunc {
 			http.Error(w, "unknown update metrica error", http.StatusInternalServerError)
 		}
 
-		// services.ShowStorage(s)
-
-		// Ответ
+		// Response
 		w.Header().Set("content-type", "text/html")
 		w.WriteHeader(http.StatusOK)
 	}
