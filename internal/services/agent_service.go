@@ -102,38 +102,38 @@ Returns:
 
 	[]models.Metrica: slice of models.Metrica objects
 */
-func collectRuntimeMetrics() []models.Metrica {
+func collectRuntimeMetrics() []models.Metric {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 
-	out := []models.Metrica{}
-	out = append(out, models.Metrica{Name: "Alloc", Type: "gauge", Value: fmt.Sprintf("%d", memStats.Alloc)})
-	out = append(out, models.Metrica{Name: "BuckHashSys", Type: "gauge", Value: fmt.Sprintf("%d", memStats.BuckHashSys)})
-	out = append(out, models.Metrica{Name: "Frees", Type: "gauge", Value: fmt.Sprintf("%d", memStats.Frees)})
-	out = append(out, models.Metrica{Name: "GCCPUFraction", Type: "gauge", Value: fmt.Sprintf("%f", memStats.GCCPUFraction)})
-	out = append(out, models.Metrica{Name: "GCSys", Type: "gauge", Value: fmt.Sprintf("%d", memStats.GCSys)})
-	out = append(out, models.Metrica{Name: "HeapAlloc", Type: "gauge", Value: fmt.Sprintf("%d", memStats.HeapAlloc)})
-	out = append(out, models.Metrica{Name: "HeapIdle", Type: "gauge", Value: fmt.Sprintf("%d", memStats.HeapIdle)})
-	out = append(out, models.Metrica{Name: "HeapInuse", Type: "gauge", Value: fmt.Sprintf("%d", memStats.HeapInuse)})
-	out = append(out, models.Metrica{Name: "HeapObjects", Type: "gauge", Value: fmt.Sprintf("%d", memStats.HeapObjects)})
-	out = append(out, models.Metrica{Name: "HeapReleased", Type: "gauge", Value: fmt.Sprintf("%d", memStats.HeapReleased)})
-	out = append(out, models.Metrica{Name: "HeapSys", Type: "gauge", Value: fmt.Sprintf("%d", memStats.HeapSys)})
-	out = append(out, models.Metrica{Name: "LastGC", Type: "gauge", Value: fmt.Sprintf("%d", memStats.LastGC)})
-	out = append(out, models.Metrica{Name: "Lookups", Type: "gauge", Value: fmt.Sprintf("%d", memStats.Lookups)})
-	out = append(out, models.Metrica{Name: "MCacheInuse", Type: "gauge", Value: fmt.Sprintf("%d", memStats.MCacheInuse)})
-	out = append(out, models.Metrica{Name: "MCacheSys", Type: "gauge", Value: fmt.Sprintf("%d", memStats.MCacheSys)})
-	out = append(out, models.Metrica{Name: "MSpanInuse", Type: "gauge", Value: fmt.Sprintf("%d", memStats.MSpanInuse)})
-	out = append(out, models.Metrica{Name: "MSpanSys", Type: "gauge", Value: fmt.Sprintf("%d", memStats.MSpanSys)})
-	out = append(out, models.Metrica{Name: "Mallocs", Type: "gauge", Value: fmt.Sprintf("%d", memStats.Mallocs)})
-	out = append(out, models.Metrica{Name: "NextGC", Type: "gauge", Value: fmt.Sprintf("%d", memStats.NextGC)})
-	out = append(out, models.Metrica{Name: "NumForcedGC", Type: "gauge", Value: fmt.Sprintf("%d", memStats.NumForcedGC)})
-	out = append(out, models.Metrica{Name: "NumGC", Type: "gauge", Value: fmt.Sprintf("%d", memStats.NumGC)})
-	out = append(out, models.Metrica{Name: "OtherSys", Type: "gauge", Value: fmt.Sprintf("%d", memStats.OtherSys)})
-	out = append(out, models.Metrica{Name: "PauseTotalNs", Type: "gauge", Value: fmt.Sprintf("%d", memStats.PauseTotalNs)})
-	out = append(out, models.Metrica{Name: "StackInuse", Type: "gauge", Value: fmt.Sprintf("%d", memStats.StackInuse)})
-	out = append(out, models.Metrica{Name: "StackSys", Type: "gauge", Value: fmt.Sprintf("%d", memStats.StackSys)})
-	out = append(out, models.Metrica{Name: "Sys", Type: "gauge", Value: fmt.Sprintf("%d", memStats.Sys)})
-	out = append(out, models.Metrica{Name: "TotalAlloc", Type: "gauge", Value: fmt.Sprintf("%d", memStats.TotalAlloc)})
+	out := []models.Metric{}
+	out = append(out, models.Metric{Name: "Alloc", Type: "gauge", Value: fmt.Sprintf("%d", memStats.Alloc)})
+	out = append(out, models.Metric{Name: "BuckHashSys", Type: "gauge", Value: fmt.Sprintf("%d", memStats.BuckHashSys)})
+	out = append(out, models.Metric{Name: "Frees", Type: "gauge", Value: fmt.Sprintf("%d", memStats.Frees)})
+	out = append(out, models.Metric{Name: "GCCPUFraction", Type: "gauge", Value: fmt.Sprintf("%f", memStats.GCCPUFraction)})
+	out = append(out, models.Metric{Name: "GCSys", Type: "gauge", Value: fmt.Sprintf("%d", memStats.GCSys)})
+	out = append(out, models.Metric{Name: "HeapAlloc", Type: "gauge", Value: fmt.Sprintf("%d", memStats.HeapAlloc)})
+	out = append(out, models.Metric{Name: "HeapIdle", Type: "gauge", Value: fmt.Sprintf("%d", memStats.HeapIdle)})
+	out = append(out, models.Metric{Name: "HeapInuse", Type: "gauge", Value: fmt.Sprintf("%d", memStats.HeapInuse)})
+	out = append(out, models.Metric{Name: "HeapObjects", Type: "gauge", Value: fmt.Sprintf("%d", memStats.HeapObjects)})
+	out = append(out, models.Metric{Name: "HeapReleased", Type: "gauge", Value: fmt.Sprintf("%d", memStats.HeapReleased)})
+	out = append(out, models.Metric{Name: "HeapSys", Type: "gauge", Value: fmt.Sprintf("%d", memStats.HeapSys)})
+	out = append(out, models.Metric{Name: "LastGC", Type: "gauge", Value: fmt.Sprintf("%d", memStats.LastGC)})
+	out = append(out, models.Metric{Name: "Lookups", Type: "gauge", Value: fmt.Sprintf("%d", memStats.Lookups)})
+	out = append(out, models.Metric{Name: "MCacheInuse", Type: "gauge", Value: fmt.Sprintf("%d", memStats.MCacheInuse)})
+	out = append(out, models.Metric{Name: "MCacheSys", Type: "gauge", Value: fmt.Sprintf("%d", memStats.MCacheSys)})
+	out = append(out, models.Metric{Name: "MSpanInuse", Type: "gauge", Value: fmt.Sprintf("%d", memStats.MSpanInuse)})
+	out = append(out, models.Metric{Name: "MSpanSys", Type: "gauge", Value: fmt.Sprintf("%d", memStats.MSpanSys)})
+	out = append(out, models.Metric{Name: "Mallocs", Type: "gauge", Value: fmt.Sprintf("%d", memStats.Mallocs)})
+	out = append(out, models.Metric{Name: "NextGC", Type: "gauge", Value: fmt.Sprintf("%d", memStats.NextGC)})
+	out = append(out, models.Metric{Name: "NumForcedGC", Type: "gauge", Value: fmt.Sprintf("%d", memStats.NumForcedGC)})
+	out = append(out, models.Metric{Name: "NumGC", Type: "gauge", Value: fmt.Sprintf("%d", memStats.NumGC)})
+	out = append(out, models.Metric{Name: "OtherSys", Type: "gauge", Value: fmt.Sprintf("%d", memStats.OtherSys)})
+	out = append(out, models.Metric{Name: "PauseTotalNs", Type: "gauge", Value: fmt.Sprintf("%d", memStats.PauseTotalNs)})
+	out = append(out, models.Metric{Name: "StackInuse", Type: "gauge", Value: fmt.Sprintf("%d", memStats.StackInuse)})
+	out = append(out, models.Metric{Name: "StackSys", Type: "gauge", Value: fmt.Sprintf("%d", memStats.StackSys)})
+	out = append(out, models.Metric{Name: "Sys", Type: "gauge", Value: fmt.Sprintf("%d", memStats.Sys)})
+	out = append(out, models.Metric{Name: "TotalAlloc", Type: "gauge", Value: fmt.Sprintf("%d", memStats.TotalAlloc)})
 
 	return out
 }
@@ -151,10 +151,10 @@ Returns:
 
 	[]models.Metrica: slice of models.Metrica objects
 */
-func collectOtherMetrics() []models.Metrica {
-	out := []models.Metrica{}
+func collectOtherMetrics() []models.Metric {
+	out := []models.Metric{}
 
-	out = append(out, models.Metrica{
+	out = append(out, models.Metric{
 		Name:  "RandomValue",
 		Type:  "gauge",
 		Value: fmt.Sprintf("%f", rand.Float64()),

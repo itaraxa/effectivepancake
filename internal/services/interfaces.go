@@ -21,7 +21,7 @@ type Querier interface {
 
 // Интерфейс для работы с метриками на агенте
 type Metricer interface {
-	AddData(data []models.Metrica) error
+	AddData(data []models.Metric) error
 	AddPollCount(pollCount uint64) error
 
 	String() string

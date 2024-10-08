@@ -6,11 +6,11 @@ import (
 )
 
 type Metrics struct {
-	Data []Metrica
+	Data []Metric
 	mu   sync.Mutex
 }
 
-type Metrica struct {
+type Metric struct {
 	Type  string
 	Name  string
 	Value string
@@ -28,7 +28,7 @@ func (ms *Metrics) String() string {
 	return out
 }
 
-func (ms *Metrics) AddData(data []Metrica) error {
+func (ms *Metrics) AddData(data []Metric) error {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
@@ -40,7 +40,7 @@ func (ms *Metrics) AddPollCount(pollCount uint64) error {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
-	ms.Data = append(ms.Data, Metrica{
+	ms.Data = append(ms.Data, Metric{
 		Name:  "PollCount",
 		Type:  "counter",
 		Value: fmt.Sprintf("%d", pollCount),
@@ -49,7 +49,7 @@ func (ms *Metrics) AddPollCount(pollCount uint64) error {
 	return nil
 }
 
-func (ms *Metrics) GetData() []Metrica {
+func (ms *Metrics) GetData() []Metric {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
