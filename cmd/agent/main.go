@@ -8,29 +8,22 @@ import (
 	"sync"
 	"time"
 
+	"github.com/itaraxa/effectivepancake/internal/config"
 	"github.com/itaraxa/effectivepancake/internal/errors"
 	"github.com/itaraxa/effectivepancake/internal/models"
 	"github.com/itaraxa/effectivepancake/internal/services"
+	"github.com/itaraxa/effectivepancake/internal/version"
 )
-
-var version string = "1.5.0"
 
 type AgentApp struct {
 	logger     *slog.Logger
 	httpClient *http.Client
-	config     *struct {
-		pollInterval   time.Duration
-		reportInterval time.Duration
-		addressServer  string
-	}
-	wg *sync.WaitGroup
+	config     *config.AgentConfig
+	wg         *sync.WaitGroup
 }
 
-func NewAgentApp(logger *slog.Logger, httpClient *http.Client, config *struct {
-	pollInterval   time.Duration
-	reportInterval time.Duration
-	addressServer  string
-}) *AgentApp {
+// TO-DO: rewrite with interfaces
+func NewAgentApp(logger *slog.Logger, httpClient *http.Client, config *config.AgentConfig) *AgentApp {
 	return &AgentApp{
 		logger:     logger,
 		httpClient: httpClient,
@@ -40,15 +33,16 @@ func NewAgentApp(logger *slog.Logger, httpClient *http.Client, config *struct {
 }
 
 func (aa *AgentApp) Run() {
+	aa.logger.Info("Agent version", slog.String("Version", version.AgentVersion))
 	aa.logger.Info("Agent started",
-		slog.String("server", aa.config.addressServer),
-		slog.Duration("poll interval", aa.config.pollInterval),
-		slog.Duration("report interval", aa.config.reportInterval),
+		slog.String("server", aa.config.AddressServer),
+		slog.Duration("poll interval", aa.config.PollInterval),
+		slog.Duration("report interval", aa.config.ReportInterval),
 	)
 	defer aa.logger.Info("Agent stopped")
 
 	var wg sync.WaitGroup
-	msCh := make(chan *models.Metrics, aa.config.reportInterval/aa.config.pollInterval+1) // создаем канал для обмена данными между сборщиком и отправщиком
+	msCh := make(chan *models.Metrics, aa.config.ReportInterval/aa.config.PollInterval+1) // создаем канал для обмена данными между сборщиком и отправщиком
 	defer close(msCh)
 
 	// Ctrl+C handling
@@ -80,7 +74,7 @@ func (aa *AgentApp) Run() {
 			pollCounter += 1
 			time.Sleep(pollInterval)
 		}
-	}(aa.config.pollInterval)
+	}(aa.config.PollInterval)
 
 	// goroutine для отправки метрик
 	wg.Add(1)
@@ -91,10 +85,10 @@ func (aa *AgentApp) Run() {
 			time.Sleep(reportInterval)
 			for len(msCh) > 0 {
 				aa.logger.Debug("Report counter", slog.Uint64("Value", reportCounter))
-				err := services.SendMetricsToServer(<-msCh, aa.config.addressServer, aa.httpClient)
+				err := services.SendMetricsToServer(<-msCh, aa.config.AddressServer, aa.httpClient)
 				if err != nil {
 					aa.logger.Error("Error sending to server. Waiting 1 second",
-						slog.String("server", aa.config.addressServer),
+						slog.String("server", aa.config.AddressServer),
 						slog.String("error", errors.ErrSendingMetricsToServer.Error()),
 					)
 					// Pause for next sending
@@ -103,7 +97,7 @@ func (aa *AgentApp) Run() {
 			}
 			reportCounter++
 		}
-	}(aa.config.reportInterval)
+	}(aa.config.ReportInterval)
 
 	wg.Wait()
 	aa.logger.Info("Agent stopped")
@@ -111,8 +105,9 @@ func (aa *AgentApp) Run() {
 
 func main() {
 	// Preparing the configuration for Agent app startup
-	parseFlags()
-	parseEnv()
+	agentConf := config.NewAgentConfig()
+	agentConf.ParseFlags()
+	agentConf.ParseEnv()
 
 	// Creating dependencies
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
@@ -121,6 +116,6 @@ func main() {
 		Timeout: 1 * time.Second,
 	}
 
-	app := NewAgentApp(logger, myClient, &config)
+	app := NewAgentApp(logger, myClient, agentConf)
 	app.Run()
 }
