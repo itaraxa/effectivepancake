@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -18,23 +17,23 @@ import (
 )
 
 type ServerApp struct {
-	logger   *slog.Logger
-	storage  *memstorage.MemStorage
-	router   *chi.Mux
-	endpoint string
+	logger  *slog.Logger
+	storage *memstorage.MemStorage
+	router  *chi.Mux
+	config  *config.ServerConfig
 }
 
-func NewServerApp(logger *slog.Logger, storage *memstorage.MemStorage, router *chi.Mux, endpoint string) *ServerApp {
+func NewServerApp(logger *slog.Logger, storage *memstorage.MemStorage, router *chi.Mux, config *config.ServerConfig) *ServerApp {
 	return &ServerApp{
-		logger:   logger,
-		storage:  storage,
-		router:   router,
-		endpoint: endpoint,
+		logger:  logger,
+		storage: storage,
+		router:  router,
+		config:  config,
 	}
 }
 
 func (sa *ServerApp) Run() {
-	sa.logger.Info("Server started", slog.String(`Listen`, sa.endpoint))
+	sa.logger.Info("Server started", slog.String(`Listen`, sa.config.Endpoint))
 	defer sa.logger.Info("Server stoped")
 
 	// Ctrl+C handling
@@ -42,9 +41,7 @@ func (sa *ServerApp) Run() {
 	signal.Notify(signalChan, os.Interrupt)
 	go func() {
 		<-signalChan
-		// Wait for closing requests
-		time.Sleep(1 * time.Second)
-		sa.logger.Info("Exit programm because Ctrl+C press")
+		sa.logger.Info("Stopping server", slog.String("cause", "Exit programm because Ctrl+C press"))
 		os.Exit(0)
 	}()
 
@@ -59,7 +56,7 @@ func (sa *ServerApp) Run() {
 
 	// Start router
 	sa.logger.Info("Start router")
-	err := http.ListenAndServe(sa.endpoint, sa.router)
+	err := http.ListenAndServe(sa.config.Endpoint, sa.router)
 	if err != nil {
 		sa.logger.Error(fmt.Sprintf("router error: %v", err))
 		os.Exit(1)
@@ -70,7 +67,7 @@ func main() {
 	serverConf := config.NewServerConfig()
 	err := serverConf.ParseFlags()
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprintf(os.Stderr, "Error parsing flags: %v", err)
 		os.Exit(1)
 	}
 	if serverConf.ShowVersion {
@@ -80,7 +77,7 @@ func main() {
 
 	err = serverConf.ParseEnv()
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprintf(os.Stderr, "Error parsing environment variable: %v", err)
 		os.Exit(1)
 	}
 
@@ -103,6 +100,6 @@ func main() {
 
 	r := chi.NewRouter()
 
-	app := NewServerApp(logger, ms, r, serverConf.Endpoint)
+	app := NewServerApp(logger, ms, r, serverConf)
 	app.Run()
 }

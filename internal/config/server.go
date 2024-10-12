@@ -53,6 +53,11 @@ func (sc *ServerConfig) ParseFlags() error {
 		fmt.Fprintf(flag.CommandLine.Output(), "Version: %s\nUsage of %s\n", version.ServerVersion, os.Args[0])
 		flag.PrintDefaults()
 	}
+	err := flag.CommandLine.Parse(os.Args[1:])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing flags: %v", err)
+		return err
+	}
 
 	return nil
 }
