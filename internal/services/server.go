@@ -54,14 +54,19 @@ func UpdateMetrica(q Querier, s Storager) error {
 		if err != nil {
 			return errors.ErrParseGauge
 		}
-		// In Storager save value as int64/float64 type
-		s.UpdateGauge(q.GetMetricName(), g)
+		err = s.UpdateGauge(q.GetMetricName(), g)
+		if err != nil {
+			return errors.ErrUpdateGauge
+		}
 	case "counter":
 		c, err := strconv.Atoi(q.GetMetricaRawValue())
 		if err != nil {
 			return errors.ErrParseCounter
 		}
-		s.AddCounter(q.GetMetricName(), int64(c))
+		err = s.AddCounter(q.GetMetricName(), int64(c))
+		if err != nil {
+			return errors.ErrAddCounter
+		}
 	default:
 		return errors.ErrBadType
 	}

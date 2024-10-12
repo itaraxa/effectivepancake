@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -124,8 +125,21 @@ func (aa *AgentApp) Run() {
 func main() {
 	// Preparing the configuration for Agent app startup
 	agentConf := config.NewAgentConfig()
-	agentConf.ParseFlags()
-	agentConf.ParseEnv()
+	err := agentConf.ParseFlags()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	if agentConf.ShowVersion {
+		fmt.Println(version.AgentVersion)
+		os.Exit(0)
+	}
+
+	err = agentConf.ParseEnv()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
 	// Creating dependencies
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))

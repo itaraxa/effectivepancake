@@ -53,7 +53,7 @@ func (sa *ServerApp) Run() {
 	sa.router.Use(middlewares.StatMiddleware(sa.logger, 10))
 
 	// Add routes
-	sa.router.Get(`/`, handlers.GetAllCurrentMetrics(sa.storage))
+	sa.router.Get(`/`, handlers.GetAllCurrentMetrics(sa.storage, sa.logger))
 	sa.router.Get(`/value/{type}/{name}`, handlers.GetMetrica(sa.storage))
 	sa.router.Post(`/update/*`, handlers.UpdateMemStorageHandler(sa.storage))
 

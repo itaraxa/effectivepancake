@@ -56,9 +56,18 @@ Returns:
 func CollectMetrics(pollCount uint64) (*models.Metrics, error) {
 	ms := &models.Metrics{}
 
-	ms.AddPollCount(pollCount)
-	ms.AddData(collectRuntimeMetrics())
-	ms.AddData(collectOtherMetrics())
+	err := ms.AddPollCount(pollCount)
+	if err != nil {
+		return ms, errors.ErrAddPollCount
+	}
+	err = ms.AddData(collectRuntimeMetrics())
+	if err != nil {
+		return ms, errors.ErrAddData
+	}
+	err = ms.AddData(collectOtherMetrics())
+	if err != nil {
+		return ms, errors.ErrAddData
+	}
 
 	return ms, nil
 }

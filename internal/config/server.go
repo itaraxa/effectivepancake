@@ -27,8 +27,9 @@ Returns:
 */
 func NewServerConfig() *ServerConfig {
 	return &ServerConfig{
-		Endpoint: `localhost:8080`,
-		LogLevel: `INFO`,
+		Endpoint:    `localhost:8080`,
+		LogLevel:    `INFO`,
+		ShowVersion: false,
 	}
 }
 

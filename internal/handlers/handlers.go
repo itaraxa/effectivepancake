@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -20,7 +21,7 @@ Returns:
 
 	http.HandlerFunc
 */
-func GetAllCurrentMetrics(s services.Storager) http.HandlerFunc {
+func GetAllCurrentMetrics(s services.Storager, l *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodGet {
 			http.Error(w, "Uncorrect request type != GET", http.StatusMethodNotAllowed)
@@ -30,7 +31,10 @@ func GetAllCurrentMetrics(s services.Storager) http.HandlerFunc {
 		w.Header().Set("content-type", "text/html")
 		w.WriteHeader(http.StatusOK)
 
-		w.Write([]byte(s.HTML()))
+		_, err := w.Write([]byte(s.HTML()))
+		if err != nil {
+			l.Error("Cannot write HTML to response body")
+		}
 	}
 }
 
@@ -56,7 +60,7 @@ func GetMetrica(s services.Storager) http.HandlerFunc {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(v))
+		_, _ = w.Write([]byte(v))
 	}
 }
 
