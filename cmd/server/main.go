@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/itaraxa/effectivepancake/internal/config"
 	"github.com/itaraxa/effectivepancake/internal/handlers"
 	"github.com/itaraxa/effectivepancake/internal/middlewares"
 	"github.com/itaraxa/effectivepancake/internal/repositories/memstorage"
+	"github.com/itaraxa/effectivepancake/internal/version"
 )
-
-// Version code: <sprint>.<increment>.<extra>
-var version string = "1.5.0"
 
 type ServerApp struct {
 	logger   *slog.Logger
@@ -67,15 +67,42 @@ func (sa *ServerApp) Run() {
 }
 
 func main() {
-	parseFlags()
-	parseEnv()
+	serverConf := config.NewServerConfig()
+	err := serverConf.ParseFlags()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	if serverConf.ShowVersion {
+		fmt.Println(version.ServerVersion)
+		os.Exit(0)
+	}
 
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	err = serverConf.ParseEnv()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	var level slog.Level
+	switch serverConf.LogLevel {
+	case "DEBUG":
+		level = slog.LevelDebug
+	case "INFO":
+		level = slog.LevelInfo
+	case "WARN":
+		level = slog.LevelWarn
+	case "ERROR":
+		level = slog.LevelError
+	default:
+		level = slog.LevelInfo
+	}
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 
 	ms := memstorage.NewMemStorage()
 
 	r := chi.NewRouter()
 
-	app := NewServerApp(logger, ms, r, config.endpoint)
+	app := NewServerApp(logger, ms, r, serverConf.Endpoint)
 	app.Run()
 }
