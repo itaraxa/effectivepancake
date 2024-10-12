@@ -15,6 +15,7 @@ type AgentConfig struct {
 	ReportInterval time.Duration
 	AddressServer  string
 	LogLevel       string
+	ShowVersion    bool
 }
 
 func NewAgentConfig() *AgentConfig {
@@ -26,9 +27,8 @@ func NewAgentConfig() *AgentConfig {
 	}
 }
 
-func (ac *AgentConfig) ParseFlags() {
-	var showVersion bool
-	flag.BoolVar(&showVersion, `v`, false, `Show version and exit`)
+func (ac *AgentConfig) ParseFlags() error {
+	flag.BoolVar(&ac.ShowVersion, `v`, false, `Show version and exit`)
 	flag.StringVar(&ac.AddressServer, `a`, `localhost:8080`, `HTTP-server endpoint address`)
 	var p, r int64
 	flag.Int64Var(&p, `p`, 2, `metrics poll interval, seconds`)
@@ -42,41 +42,37 @@ func (ac *AgentConfig) ParseFlags() {
 	err := flag.CommandLine.Parse(os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error parsing flags: %v", err)
-		os.Exit(1)
+		return err
 	}
 
 	ac.PollInterval = time.Duration(p) * time.Second
 	ac.ReportInterval = time.Duration(r) * time.Second
 
-	if showVersion {
-		fmt.Printf("Agent version: %s\n\r", version.AgentVersion)
-		os.Exit(0)
-	}
+	return nil
 }
 
-func (ac *AgentConfig) ParseEnv() {
+func (ac *AgentConfig) ParseEnv() error {
 	p, ok := os.LookupEnv(`POLL_INTERVAL`)
 	if ok {
 		pi, err := strconv.Atoi(p)
 		if err != nil {
-			ac.PollInterval = time.Duration(pi) * time.Second
+			return err
 		}
+		ac.PollInterval = time.Duration(pi) * time.Second
 	}
 
 	r, ok := os.LookupEnv(`REPORT_INTERVAL`)
 	if ok {
 		ri, err := strconv.Atoi(r)
 		if err != nil {
-			ac.ReportInterval = time.Duration(ri) * time.Second
+			return err
 		}
+		ac.ReportInterval = time.Duration(ri) * time.Second
 	}
 
 	addressServer, ok := os.LookupEnv(`ADDRESS`)
 	if ok {
 		ac.AddressServer = addressServer
 	}
-}
-
-type ServerConfig struct {
-	endpoint string
+	return nil
 }
