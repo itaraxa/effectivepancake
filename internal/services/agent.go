@@ -11,12 +11,20 @@ import (
 	"github.com/itaraxa/effectivepancake/internal/models"
 )
 
+// Интерфейс для работы с метриками на агенте
+type Metricer interface {
+	AddData(data []models.Metric) error
+	AddPollCount(pollCount uint64) error
+	String() string
+	GetData() []models.Metric
+}
+
 /*
 Sending metrica data to server via http
 
 Args:
 
-	ms *models.Metrics: pointer to models.Metrics object, which store metrica data
+	ms Metricer: pointer to object implemented Metricer interface
 	serverURL string: endpoint of server
 	client *http.Client: pointer to httpClient object, which uses for connection to server
 
@@ -24,7 +32,7 @@ Returns:
 
 	error: nil or error, encountered during sending data
 */
-func SendMetricsToServer(ms *models.Metrics, serverURL string, client *http.Client) error {
+func SendMetricsToServer(ms Metricer, serverURL string, client *http.Client) error {
 	for _, m := range ms.GetData() {
 		res, err := client.Post(fmt.Sprintf("http://%s/update/%s/%s/%s", serverURL, m.Type, m.Name, m.Value), "text/plain", nil)
 		if err != nil {
@@ -53,7 +61,7 @@ Returns:
 	*models.Metrica: pointer to models.Metrics structure, which store metrica data on Agent
 	error: nil
 */
-func CollectMetrics(pollCount uint64) (*models.Metrics, error) {
+func CollectMetrics(pollCount uint64) (Metricer, error) {
 	ms := &models.Metrics{}
 
 	err := ms.AddPollCount(pollCount)
