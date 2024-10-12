@@ -48,12 +48,15 @@ func (aa *AgentApp) Run() {
 	// Ctrl+C handling
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt)
+	pollingStopChan := make(chan bool, 1)
+	reportStopChan := make(chan bool, 1)
 	go func() {
 		<-signalChan
-		// Wait for closing requests
-		time.Sleep(1 * time.Second)
-		aa.logger.Info("Agent stopped", slog.String("reason", "Ctrl+C press"))
-		os.Exit(0)
+		aa.logger.Info("Agent stopping", slog.String("reason", "Ctrl+C press"))
+		<-pollingStopChan
+		pollingStopChan <- true
+		<-reportStopChan
+		reportStopChan <- true
 	}()
 
 	// goroutine для сбора метрик
@@ -61,7 +64,10 @@ func (aa *AgentApp) Run() {
 	go func(pollInterval time.Duration) {
 		defer wg.Done()
 		var pollCounter uint64 = 0
+	POLLING:
 		for {
+			pollingStopChan <- false
+
 			aa.logger.Debug("Poll counter", slog.Uint64("Value", pollCounter))
 			ms, err := services.CollectMetrics(pollCounter)
 			if err != nil {
@@ -73,6 +79,11 @@ func (aa *AgentApp) Run() {
 			msCh <- ms
 			pollCounter += 1
 			time.Sleep(pollInterval)
+
+			if <-pollingStopChan {
+				aa.logger.Info("Polling metrica stopped")
+				break POLLING
+			}
 		}
 	}(aa.config.PollInterval)
 
@@ -81,7 +92,10 @@ func (aa *AgentApp) Run() {
 	go func(reportInterval time.Duration) {
 		defer wg.Done()
 		var reportCounter uint64 = 0
+	REPORTING:
 		for {
+			reportStopChan <- false
+
 			time.Sleep(reportInterval)
 			for len(msCh) > 0 {
 				aa.logger.Debug("Report counter", slog.Uint64("Value", reportCounter))
@@ -96,11 +110,15 @@ func (aa *AgentApp) Run() {
 				}
 			}
 			reportCounter++
+
+			if <-reportStopChan {
+				aa.logger.Info("Reporting metrica stopped")
+				break REPORTING
+			}
 		}
 	}(aa.config.ReportInterval)
 
 	wg.Wait()
-	aa.logger.Info("Agent stopped")
 }
 
 func main() {
