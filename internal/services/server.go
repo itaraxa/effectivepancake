@@ -48,10 +48,16 @@ func ParseQueryString(raw string) (q Querier, err error) {
 	q = models.NewQuery()
 	err = q.SetMetricaType(queryString)
 	if err != nil {
-		return q, err
+		return models.NewQuery(), err
 	}
-	_ = q.SetMetricaName(queryString)
-	_ = q.SetMetricaRawValue(queryString)
+	err = q.SetMetricaName(queryString)
+	if err != nil {
+		return models.NewQuery(), err
+	}
+	err = q.SetMetricaRawValue(queryString)
+	if err != nil {
+		return models.NewQuery(), err
+	}
 	return q, nil
 }
 

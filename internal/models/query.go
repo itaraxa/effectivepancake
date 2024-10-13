@@ -75,8 +75,11 @@ func (q Query) GetMetricName() string {
 }
 
 func (q *Query) SetMetricaName(queryString string) error {
-	q.MetricName = strings.Split(queryString, `/`)[2]
-
+	if name := strings.Split(queryString, `/`)[2]; name != `` {
+		q.MetricName = name
+	} else {
+		return errors.ErrEmptyMetricaName
+	}
 	return nil
 }
 

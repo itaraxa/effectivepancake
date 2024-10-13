@@ -75,38 +75,60 @@ Returns:
 
 	http.HandlerFunc
 */
-func UpdateMemStorageHandler(s services.Storager) http.HandlerFunc {
+func UpdateMemStorageHandler(l *slog.Logger, s services.Storager) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		// Checks
 		if req.Method != http.MethodPost {
 			http.Error(w, "Only POST request allowed", http.StatusMethodNotAllowed)
+			l.Error("Only POST request allowed")
 			return
 		}
 
 		// Processing
 		q, err := services.ParseQueryString(req.URL.Path)
-		if err != nil && errors.Is(err, myErrors.ErrBadRawQuery) {
-			services.ShowQuery(q)
+		if err != nil && (errors.Is(err, myErrors.ErrBadRawQuery) ||
+			errors.Is(err, myErrors.ErrEmptyMetricaName) ||
+			errors.Is(err, myErrors.ErrEmptyMetricaRawValue)) {
 			http.Error(w, "query string does not match the format", http.StatusNotFound)
+			l.Error("query string does not match the format",
+				slog.String("query string", req.URL.Path),
+				slog.String("error", err.Error()),
+			)
 			return
 		}
 		if err != nil && (errors.Is(err, myErrors.ErrBadType) || errors.Is(err, myErrors.ErrBadValue)) {
-			services.ShowQuery(q)
 			http.Error(w, "invalid type or value", http.StatusBadRequest)
+			l.Error("invalid type or value",
+				slog.String("query string", req.URL.Path),
+				slog.String("error", err.Error()),
+			)
 			return
 		}
 		if err != nil {
-			services.ShowQuery(q)
 			http.Error(w, "unknown parse query error", http.StatusInternalServerError)
+			l.Error("unknown parse query error",
+				slog.String("query string", req.URL.Path),
+				slog.String("error", err.Error()),
+			)
+			return
 		}
 
 		err = services.UpdateMetrica(q, s)
 		if err != nil && (errors.Is(err, myErrors.ErrParseGauge) || errors.Is(err, myErrors.ErrParseCounter)) {
 			http.Error(w, "the value is not of the specified type", http.StatusBadRequest)
+			l.Error("the value is not of the specified type",
+				slog.String("query", q.String()),
+				slog.String("error", err.Error()),
+			)
 			return
 		}
 		if err != nil {
 			http.Error(w, "unknown update metrica error", http.StatusInternalServerError)
+			l.Error("unknown update metrica error",
+				slog.String("query", q.String()),
+				slog.String("error", err.Error()),
+			)
+			return
 		}
 
 		// Response
