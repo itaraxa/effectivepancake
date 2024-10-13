@@ -3,10 +3,14 @@ package services
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"math/rand"
 	"net/http"
 	"runtime"
+	"sync"
+	"time"
 
+	"github.com/itaraxa/effectivepancake/internal/config"
 	"github.com/itaraxa/effectivepancake/internal/errors"
 	"github.com/itaraxa/effectivepancake/internal/models"
 )
@@ -32,7 +36,7 @@ Returns:
 
 	error: nil or error, encountered during sending data
 */
-func SendMetricsToServer(ms Metricer, serverURL string, client *http.Client) error {
+func sendMetricsToServer(ms Metricer, serverURL string, client *http.Client) error {
 	for _, m := range ms.GetData() {
 		res, err := client.Post(fmt.Sprintf("http://%s/update/%s/%s/%s", serverURL, m.Type, m.Name, m.Value), "text/plain", nil)
 		if err != nil {
@@ -61,7 +65,7 @@ Returns:
 	*models.Metrica: pointer to models.Metrics structure, which store metrica data on Agent
 	error: nil
 */
-func CollectMetrics(pollCount uint64) (Metricer, error) {
+func collectMetrics(pollCount uint64) (Metricer, error) {
 	ms := &models.Metrics{}
 
 	err := ms.AddPollCount(pollCount)
@@ -178,4 +182,90 @@ func collectOtherMetrics() []models.Metric {
 	})
 
 	return out
+}
+
+/*
+Function for periodically collecting all metrics
+
+Args:
+
+	wg *sync.WaitGroup: pointer to sync.WaitGroup for for controlling the completion of a function in a goroutine
+	controlChan chan bool: channel for receiving a stop signal
+	dataChan chan Metricer: channel for exchanging metric data
+	l *slog.Logger: pointer to logger instance
+	pollInterval time.Duration
+
+Returns:
+
+	None
+*/
+func PollMetrics(wg *sync.WaitGroup, controlChan chan bool, dataChan chan Metricer, l *slog.Logger, config *config.AgentConfig) {
+	defer wg.Done()
+	var pollCounter uint64 = 0
+POLLING:
+	for {
+		controlChan <- false
+
+		l.Debug("Poll counter", slog.Uint64("Value", pollCounter))
+		ms, err := collectMetrics(pollCounter)
+		if err != nil {
+			l.Error("Error collect metrics")
+		}
+		if len(dataChan) == cap(dataChan) {
+			l.Error("Error internal commnication", slog.String("error", errors.ErrChannelFull.Error()))
+		}
+		dataChan <- ms
+		pollCounter += 1
+		time.Sleep(config.PollInterval)
+
+		if <-controlChan {
+			l.Info("Polling metrica stopped")
+			break POLLING
+		}
+	}
+}
+
+/*
+Function for periodically sending metrics
+
+Args:
+
+	wg *sync.WaitGroup: pointer to sync.WaitGroup for for controlling the completion of a function in a goroutine
+	controlChan chan bool: channel for receiving a stop signal
+	dataChan chan Metricer: channel for exchanging metric data
+	l *slog.Logger: pointer to logger instance
+	config *config.AgentConfig: pointer to config instance
+	client *http.Client: pointer to http client instance
+
+Returns:
+
+	None
+*/
+func ReportMetrics(wg *sync.WaitGroup, controlChan chan bool, dataChan chan Metricer, l *slog.Logger, config *config.AgentConfig, client *http.Client) {
+	defer wg.Done()
+	var reportCounter uint64 = 0
+REPORTING:
+	for {
+		controlChan <- false
+
+		time.Sleep(config.ReportInterval)
+		for len(dataChan) > 0 {
+			l.Debug("Report counter", slog.Uint64("Value", reportCounter))
+			err := sendMetricsToServer(<-dataChan, config.AddressServer, client)
+			if err != nil {
+				l.Error("Error sending to server. Waiting 1 second",
+					slog.String("server", config.AddressServer),
+					slog.String("error", errors.ErrSendingMetricsToServer.Error()),
+				)
+				// Pause for next sending
+				time.Sleep(1 * time.Second)
+			}
+		}
+		reportCounter++
+
+		if <-controlChan {
+			l.Info("Reporting metrica stopped")
+			break REPORTING
+		}
+	}
 }

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/itaraxa/effectivepancake/internal/config"
-	"github.com/itaraxa/effectivepancake/internal/errors"
 	"github.com/itaraxa/effectivepancake/internal/services"
 	"github.com/itaraxa/effectivepancake/internal/version"
 )
@@ -53,6 +52,8 @@ func (aa *AgentApp) Run() {
 	go func() {
 		<-signalChan
 		aa.logger.Info("Agent stopping", slog.String("reason", "Ctrl+C press"))
+		// sending true to the control channel if polling/reporting should stop
+		// reading from channel for unblocking
 		<-pollingStopChan
 		pollingStopChan <- true
 		<-reportStopChan
@@ -61,62 +62,11 @@ func (aa *AgentApp) Run() {
 
 	// goroutine для сбора метрик
 	wg.Add(1)
-	go func(pollInterval time.Duration) {
-		defer wg.Done()
-		var pollCounter uint64 = 0
-	POLLING:
-		for {
-			pollingStopChan <- false
-
-			aa.logger.Debug("Poll counter", slog.Uint64("Value", pollCounter))
-			ms, err := services.CollectMetrics(pollCounter)
-			if err != nil {
-				aa.logger.Error("Error collect metrics", slog.String("error", err.Error()))
-			}
-			if len(msCh) == cap(msCh) {
-				aa.logger.Error("Error internal commnication", slog.String("error", errors.ErrChannelFull.Error()))
-			}
-			msCh <- ms
-			pollCounter += 1
-			time.Sleep(pollInterval)
-
-			if <-pollingStopChan {
-				aa.logger.Info("Polling metrica stopped")
-				break POLLING
-			}
-		}
-	}(aa.config.PollInterval)
+	go services.PollMetrics(&wg, pollingStopChan, msCh, aa.logger, aa.config)
 
 	// goroutine для отправки метрик
 	wg.Add(1)
-	go func(reportInterval time.Duration) {
-		defer wg.Done()
-		var reportCounter uint64 = 0
-	REPORTING:
-		for {
-			reportStopChan <- false
-
-			time.Sleep(reportInterval)
-			for len(msCh) > 0 {
-				aa.logger.Debug("Report counter", slog.Uint64("Value", reportCounter))
-				err := services.SendMetricsToServer(<-msCh, aa.config.AddressServer, aa.httpClient)
-				if err != nil {
-					aa.logger.Error("Error sending to server. Waiting 1 second",
-						slog.String("server", aa.config.AddressServer),
-						slog.String("error", errors.ErrSendingMetricsToServer.Error()),
-					)
-					// Pause for next sending
-					time.Sleep(1 * time.Second)
-				}
-			}
-			reportCounter++
-
-			if <-reportStopChan {
-				aa.logger.Info("Reporting metrica stopped")
-				break REPORTING
-			}
-		}
-	}(aa.config.ReportInterval)
+	go services.ReportMetrics(&wg, reportStopChan, msCh, aa.logger, aa.config, aa.httpClient)
 
 	wg.Wait()
 }
