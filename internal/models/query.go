@@ -95,6 +95,10 @@ func (q Query) GetMetricaRawValue() string {
 }
 
 func (q *Query) SetMetricaRawValue(queryString string) error {
-	q.MetricRawValue = strings.Split(queryString, `/`)[3]
+	if rawValue := strings.Split(queryString, `/`)[3]; rawValue != `` {
+		q.MetricRawValue = rawValue
+	} else {
+		return errors.ErrEmptyMetricaRawValue
+	}
 	return nil
 }
