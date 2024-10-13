@@ -2,6 +2,9 @@ package models
 
 import (
 	"fmt"
+	"strings"
+
+	"github.com/itaraxa/effectivepancake/internal/errors"
 )
 
 // Структура представляющая полученный запрос
@@ -10,6 +13,10 @@ type Query struct {
 	MetricType     string
 	MetricName     string
 	MetricRawValue string
+}
+
+func NewQuery() *Query {
+	return &Query{}
 }
 
 /*
@@ -27,7 +34,7 @@ Output example:
 	>>Name: test1
 	>>Value: 3.14
 */
-func (q Query) String() string {
+func (q *Query) String() string {
 	s := "==== Query ====\n\r"
 	s += fmt.Sprintf(">Raw: %s\n\r", q.raw)
 	s += fmt.Sprintf(">>Type: %s\n\r", q.MetricType)
@@ -48,6 +55,14 @@ func (q Query) GetMetricaType() string {
 	return q.MetricType
 }
 
+func (q *Query) SetMetricaType(queryString string) error {
+	q.MetricType = strings.Split(queryString, `/`)[1]
+	if q.MetricType != "gauge" && q.MetricType != "counter" {
+		return errors.ErrBadType
+	}
+	return nil
+}
+
 /*
 Get metrica name
 
@@ -59,6 +74,12 @@ func (q Query) GetMetricName() string {
 	return q.MetricName
 }
 
+func (q *Query) SetMetricaName(queryString string) error {
+	q.MetricName = strings.Split(queryString, `/`)[2]
+
+	return nil
+}
+
 /*
 Get metrica raw value (string representation of value)
 
@@ -68,4 +89,9 @@ Returns:
 */
 func (q Query) GetMetricaRawValue() string {
 	return q.MetricRawValue
+}
+
+func (q *Query) SetMetricaRawValue(queryString string) error {
+	q.MetricRawValue = strings.Split(queryString, `/`)[3]
+	return nil
 }

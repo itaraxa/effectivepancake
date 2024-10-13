@@ -20,11 +20,11 @@ type Storager interface {
 // Интерфейс для описания взаимодействия с запросом на обновление метрики
 type Querier interface {
 	GetMetricaType() string
-	SetMetricaType(string) (Querier, error)
+	SetMetricaType(string) error
 	GetMetricName() string
-	SetMetricaName(string) (Querier, error)
+	SetMetricaName(string) error
 	GetMetricaRawValue() string
-	SetMetricaRawValue(string) (Querier, error)
+	SetMetricaRawValue(string) error
 	String() string
 }
 
@@ -37,7 +37,7 @@ Args:
 
 Returns:
 
-	q models.Query: copy of instance models.Query
+	q Querier: copy of instance, implemented Querier
 	err error: nil or error occurred while parsing the raw string
 */
 func ParseQueryString(raw string) (q Querier, err error) {
@@ -46,12 +46,12 @@ func ParseQueryString(raw string) (q Querier, err error) {
 		return nil, errors.ErrBadRawQuery
 	}
 	q = models.NewQuery()
-	q, err = q.SetMetricaType(queryString)
+	err = q.SetMetricaType(queryString)
 	if err != nil {
 		return q, err
 	}
-	// q, _ = q.SetMetricaName(queryString)
-	q, _ = q.SetMetricaRawValue(queryString)
+	_ = q.SetMetricaName(queryString)
+	_ = q.SetMetricaRawValue(queryString)
 	return q, nil
 }
 

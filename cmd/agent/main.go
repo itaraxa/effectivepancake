@@ -11,7 +11,6 @@ import (
 
 	"github.com/itaraxa/effectivepancake/internal/config"
 	"github.com/itaraxa/effectivepancake/internal/errors"
-	"github.com/itaraxa/effectivepancake/internal/models"
 	"github.com/itaraxa/effectivepancake/internal/services"
 	"github.com/itaraxa/effectivepancake/internal/version"
 )
@@ -43,7 +42,7 @@ func (aa *AgentApp) Run() {
 	defer aa.logger.Info("Agent stopped")
 
 	var wg sync.WaitGroup
-	msCh := make(chan *models.Metrics, aa.config.ReportInterval/aa.config.PollInterval+1) // создаем канал для обмена данными между сборщиком и отправщиком
+	msCh := make(chan services.Metricer, aa.config.ReportInterval/aa.config.PollInterval+1) // создаем канал для обмена данными между сборщиком и отправщиком
 	defer close(msCh)
 
 	// Ctrl+C handling
@@ -141,8 +140,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Creating dependencies
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	var level slog.Level
+	switch agentConf.LogLevel {
+	case "DEBUG":
+		level = slog.LevelDebug
+	case "INFO":
+		level = slog.LevelInfo
+	case "WARN":
+		level = slog.LevelWarn
+	case "ERROR":
+		level = slog.LevelError
+	default:
+		level = slog.LevelInfo
+	}
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 
 	myClient := &http.Client{
 		Timeout: 1 * time.Second,

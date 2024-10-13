@@ -30,6 +30,7 @@ func NewAgentConfig() *AgentConfig {
 func (ac *AgentConfig) ParseFlags() error {
 	flag.BoolVar(&ac.ShowVersion, `v`, false, `Show version and exit`)
 	flag.StringVar(&ac.AddressServer, `a`, `localhost:8080`, `HTTP-server endpoint address`)
+	flag.StringVar(&ac.LogLevel, `log`, `INFO`, `Set log level: INFO, DEBUG, etc.`)
 	var p, r int64
 	flag.Int64Var(&p, `p`, 2, `metrics poll interval, seconds`)
 	flag.Int64Var(&r, `r`, 10, `metrics report interval, seconds`)
