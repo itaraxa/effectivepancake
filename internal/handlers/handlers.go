@@ -2,11 +2,11 @@ package handlers
 
 import (
 	"errors"
-	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	myErrors "github.com/itaraxa/effectivepancake/internal/errors"
+	"github.com/itaraxa/effectivepancake/internal/logger"
 	"github.com/itaraxa/effectivepancake/internal/services"
 )
 
@@ -21,7 +21,7 @@ Returns:
 
 	http.HandlerFunc
 */
-func GetAllCurrentMetrics(s services.Storager, l *slog.Logger) http.HandlerFunc {
+func GetAllCurrentMetrics(s services.Storager, l logger.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodGet {
 			http.Error(w, "Uncorrect request type != GET", http.StatusMethodNotAllowed)
@@ -49,14 +49,14 @@ Returns:
 
 	http.HandlerFunc
 */
-func GetMetrica(s services.Storager) http.HandlerFunc {
+func GetMetrica(s services.Storager, l logger.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("content-type", "text/plain")
-
+		l.Info("get metrica", "type", chi.URLParam(req, "type"), "name", chi.URLParam(req, "name"))
 		v, err := s.GetMetrica(chi.URLParam(req, "type"), chi.URLParam(req, "name"))
 		if err != nil {
 			w.WriteHeader(http.StatusNotFound)
-			// TO-DO: add error reporting into logger
+			l.Error("cannot get metrica", "type", chi.URLParam(req, "type"), "name", chi.URLParam(req, "name"))
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -75,7 +75,7 @@ Returns:
 
 	http.HandlerFunc
 */
-func UpdateMemStorageHandler(l *slog.Logger, s services.Storager) http.HandlerFunc {
+func UpdateMemStorageHandler(l logger.Logger, s services.Storager) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		// Checks
 		if req.Method != http.MethodPost {
@@ -90,44 +90,29 @@ func UpdateMemStorageHandler(l *slog.Logger, s services.Storager) http.HandlerFu
 			errors.Is(err, myErrors.ErrEmptyMetricaName) ||
 			errors.Is(err, myErrors.ErrEmptyMetricaRawValue)) {
 			http.Error(w, "query string does not match the format", http.StatusNotFound)
-			l.Error("query string does not match the format",
-				slog.String("query string", req.URL.Path),
-				slog.String("error", err.Error()),
-			)
+			l.Error("query string does not match the format", "query string", req.URL.Path, "error", err.Error())
 			return
 		}
 		if err != nil && (errors.Is(err, myErrors.ErrBadType) || errors.Is(err, myErrors.ErrBadValue)) {
 			http.Error(w, "invalid type or value", http.StatusBadRequest)
-			l.Error("invalid type or value",
-				slog.String("query string", req.URL.Path),
-				slog.String("error", err.Error()),
-			)
+			l.Error("invalid type or value", "query string", req.URL.Path, "error", err.Error())
 			return
 		}
 		if err != nil {
 			http.Error(w, "unknown parse query error", http.StatusInternalServerError)
-			l.Error("unknown parse query error",
-				slog.String("query string", req.URL.Path),
-				slog.String("error", err.Error()),
-			)
+			l.Error("unknown parse query error", "query string", req.URL.Path, "error", err.Error())
 			return
 		}
 
 		err = services.UpdateMetrica(q, s)
 		if err != nil && (errors.Is(err, myErrors.ErrParseGauge) || errors.Is(err, myErrors.ErrParseCounter)) {
 			http.Error(w, "the value is not of the specified type", http.StatusBadRequest)
-			l.Error("the value is not of the specified type",
-				slog.String("query", q.String()),
-				slog.String("error", err.Error()),
-			)
+			l.Error("the value is not of the specified type", "query", q.String(), "error", err.Error())
 			return
 		}
 		if err != nil {
 			http.Error(w, "unknown update metrica error", http.StatusInternalServerError)
-			l.Error("unknown update metrica error",
-				slog.String("query", q.String()),
-				slog.String("error", err.Error()),
-			)
+			l.Error("unknown update metrica error", "query", q.String(), "error", err.Error())
 			return
 		}
 

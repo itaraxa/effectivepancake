@@ -2,28 +2,29 @@ package main
 
 import (
 	"fmt"
-	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 
 	"github.com/itaraxa/effectivepancake/internal/config"
 	"github.com/itaraxa/effectivepancake/internal/handlers"
+	"github.com/itaraxa/effectivepancake/internal/logger"
 	"github.com/itaraxa/effectivepancake/internal/middlewares"
 	"github.com/itaraxa/effectivepancake/internal/repositories/memstorage"
 	"github.com/itaraxa/effectivepancake/internal/version"
 )
 
 type ServerApp struct {
-	logger  *slog.Logger
+	logger  logger.Logger
 	storage *memstorage.MemStorage
 	router  *chi.Mux
 	config  *config.ServerConfig
 }
 
-func NewServerApp(logger *slog.Logger, storage *memstorage.MemStorage, router *chi.Mux, config *config.ServerConfig) *ServerApp {
+func NewServerApp(logger logger.Logger, storage *memstorage.MemStorage, router *chi.Mux, config *config.ServerConfig) *ServerApp {
 	return &ServerApp{
 		logger:  logger,
 		storage: storage,
@@ -33,7 +34,7 @@ func NewServerApp(logger *slog.Logger, storage *memstorage.MemStorage, router *c
 }
 
 func (sa *ServerApp) Run() {
-	sa.logger.Info("Server started", slog.String(`Listen`, sa.config.Endpoint))
+	sa.logger.Info("Server started", zap.String(`Listen`, sa.config.Endpoint))
 	defer sa.logger.Info("Server stoped")
 
 	// Ctrl+C handling
@@ -41,7 +42,7 @@ func (sa *ServerApp) Run() {
 	signal.Notify(signalChan, os.Interrupt)
 	go func() {
 		<-signalChan
-		sa.logger.Info("Stopping server", slog.String("cause", "Exit programm because Ctrl+C press"))
+		sa.logger.Info("Stopping server", zap.String("cause", "Exit programm because Ctrl+C press"))
 		os.Exit(0)
 	}()
 
@@ -51,7 +52,7 @@ func (sa *ServerApp) Run() {
 
 	// Add routes
 	sa.router.Get(`/`, handlers.GetAllCurrentMetrics(sa.storage, sa.logger))
-	sa.router.Get(`/value/{type}/{name}`, handlers.GetMetrica(sa.storage))
+	sa.router.Get(`/value/{type}/{name}`, handlers.GetMetrica(sa.storage, sa.logger))
 	sa.router.Post(`/update/*`, handlers.UpdateMemStorageHandler(sa.logger, sa.storage))
 
 	// Start router
@@ -81,20 +82,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	var level slog.Level
-	switch serverConf.LogLevel {
-	case "DEBUG":
-		level = slog.LevelDebug
-	case "INFO":
-		level = slog.LevelInfo
-	case "WARN":
-		level = slog.LevelWarn
-	case "ERROR":
-		level = slog.LevelError
-	default:
-		level = slog.LevelInfo
+	logger, err := logger.NewZapLogger(serverConf.LogLevel)
+	if err != nil {
+		panic(err)
 	}
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
+	defer logger.Sync()
 
 	ms := memstorage.NewMemStorage()
 

@@ -2,10 +2,11 @@ package middlewares
 
 import (
 	"fmt"
-	"log/slog"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/itaraxa/effectivepancake/internal/logger"
 )
 
 /*
@@ -43,28 +44,19 @@ Returns:
 
 	func(next http.Handler) http.Handler
 */
-func LoggerMiddleware(logger *slog.Logger) func(next http.Handler) http.Handler {
+func LoggerMiddleware(logger logger.Logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Request
 			start := time.Now()
 			wrappedWriter := &responseWriterWrapper{ResponseWriter: w, statusCode: http.StatusOK}
-			logger.Debug("Request received",
-				slog.String("method", r.Method),
-				slog.String("path", r.URL.Path),
-				slog.String("remote_addr", r.RemoteAddr),
-			)
+			logger.Debug("Request received", "method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr)
 
 			// Doing next middleware
 			next.ServeHTTP(wrappedWriter, r)
 
 			// Response
-			logger.Debug("Request completed",
-				slog.String("method", r.Method),
-				slog.String("path", r.URL.Path),
-				slog.Int("status", wrappedWriter.statusCode),
-				slog.Duration("duration", time.Since(start)),
-			)
+			logger.Debug("Request completed", "method", r.Method, "path", r.URL.Path, "status", wrappedWriter.statusCode, "duration", time.Since(start))
 		})
 	}
 }
@@ -122,7 +114,7 @@ Returns:
 
 	func(next http.Handler) http.Handler
 */
-func StatMiddleware(logger *slog.Logger, logInterval int) func(next http.Handler) http.Handler {
+func StatMiddleware(logger logger.Logger, logInterval int) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			wrappedWriter := &responseWriterWrapper{ResponseWriter: w, statusCode: http.StatusOK}
@@ -134,10 +126,7 @@ func StatMiddleware(logger *slog.Logger, logInterval int) func(next http.Handler
 			stat.statType[r.Method] += 1
 			stat.statCode[wrappedWriter.statusCode] += 1
 			if stat.counter%logInterval == 0 {
-				logger.Info("Request stat:",
-					slog.Int("counter", stat.counter),
-					slog.String("Type stat", fmt.Sprintf("%v", stat.statType)),
-					slog.String("StatusCode stat", fmt.Sprintf("%v", stat.statCode)))
+				logger.Info("Request stat:", "counter", stat.counter, "Type stat", fmt.Sprintf("%v", stat.statType), "StatusCode stat", fmt.Sprintf("%v", stat.statCode))
 			}
 		})
 	}
