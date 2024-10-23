@@ -17,6 +17,7 @@ import (
 	"github.com/itaraxa/effectivepancake/internal/version"
 )
 
+// Structure for embedding dependencies into the server app
 type ServerApp struct {
 	logger  logger.Logger
 	storage *memstorage.MemStorage
@@ -24,6 +25,20 @@ type ServerApp struct {
 	config  *config.ServerConfig
 }
 
+/*
+NewServerApp creates an empty instance of the serverApp structure
+
+Args:
+
+	logger logger.Logger: object, implementing the logger.Logger interface
+	storage *memstorage.MemStorage: pointer to memstorage.MemStorage object
+	router *chi.Mux: http router
+	config  *config.ServerConfig: pointer to config.ServerConfig instance
+
+Returns:
+
+	*ServerApp: pointer to the ServerApp instance
+*/
 func NewServerApp(logger logger.Logger, storage *memstorage.MemStorage, router *chi.Mux, config *config.ServerConfig) *ServerApp {
 	return &ServerApp{
 		logger:  logger,
@@ -33,6 +48,13 @@ func NewServerApp(logger logger.Logger, storage *memstorage.MemStorage, router *
 	}
 }
 
+/*
+Run function start a logging and http-routing processes
+
+Args:
+
+	sa *ServerApp: pointer to ServerApp structure with injected dependencies
+*/
 func (sa *ServerApp) Run() {
 	sa.logger.Info("Server started", zap.String(`Listen`, sa.config.Endpoint))
 	defer sa.logger.Info("Server stoped")
