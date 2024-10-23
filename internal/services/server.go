@@ -13,6 +13,7 @@ type Storager interface {
 	UpdateGauge(metricName string, value float64) error
 	AddCounter(metricName string, value int64) error
 	GetMetrica(metricaType string, metricaName string) (string, error)
+	GetMetricaValue(metricaType string, metricaName string) (interface{}, error)
 	String() string
 	HTML() string
 }
@@ -25,6 +26,13 @@ type Querier interface {
 	SetMetricaName(string) error
 	GetMetricaRawValue() string
 	SetMetricaRawValue(string) error
+	String() string
+}
+
+type JSONQuerier interface {
+	GetMetricaType() string
+	GetMetricaName() string
+	GetMetricaValue() interface{}
 	String() string
 }
 
@@ -90,6 +98,24 @@ func UpdateMetrica(q Querier, s Storager) error {
 			return errors.ErrParseCounter
 		}
 		err = s.AddCounter(q.GetMetricName(), int64(c))
+		if err != nil {
+			return errors.ErrAddCounter
+		}
+	default:
+		return errors.ErrBadType
+	}
+	return nil
+}
+
+func JSONUpdateMetrica(jq JSONQuerier, s Storager) error {
+	switch jq.GetMetricaType() {
+	case "gauge":
+		err := s.UpdateGauge(jq.GetMetricaName(), jq.GetMetricaValue().(float64))
+		if err != nil {
+			return errors.ErrUpdateGauge
+		}
+	case "counter":
+		err := s.AddCounter(jq.GetMetricaName(), jq.GetMetricaValue().(int64))
 		if err != nil {
 			return errors.ErrAddCounter
 		}

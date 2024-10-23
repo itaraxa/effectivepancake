@@ -75,6 +75,7 @@ func (sa *ServerApp) Run() {
 	// Add routes
 	sa.router.Get(`/`, handlers.GetAllCurrentMetrics(sa.storage, sa.logger))
 	sa.router.Get(`/value/{type}/{name}`, handlers.GetMetrica(sa.storage, sa.logger))
+	sa.router.Post(`/update/`, handlers.JSONUpdateMemStorageHandler(sa.logger, sa.storage))
 	sa.router.Post(`/update/*`, handlers.UpdateMemStorageHandler(sa.logger, sa.storage))
 
 	// Start router

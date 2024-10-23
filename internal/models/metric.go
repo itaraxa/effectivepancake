@@ -11,8 +11,8 @@ type Metrics struct {
 }
 
 type Metric struct {
-	Type  string
-	Name  string
+	MType string
+	ID    string
 	Value string
 }
 
@@ -22,7 +22,7 @@ func (ms *Metrics) String() string {
 
 	out := "==== Metrics ====\n\r"
 	for _, m := range ms.Data {
-		out += fmt.Sprintf(">>%s(%s) = %s\n\r", m.Name, m.Type, m.Value)
+		out += fmt.Sprintf(">>%s(%s) = %s\n\r", m.ID, m.MType, m.Value)
 	}
 
 	return out
@@ -41,8 +41,8 @@ func (ms *Metrics) AddPollCount(pollCount uint64) error {
 	defer ms.mu.Unlock()
 
 	ms.Data = append(ms.Data, Metric{
-		Name:  "PollCount",
-		Type:  "counter",
+		ID:    "PollCount",
+		MType: "counter",
 		Value: fmt.Sprintf("%d", pollCount),
 	})
 
