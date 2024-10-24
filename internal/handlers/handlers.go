@@ -171,10 +171,10 @@ func JSONUpdateMemStorageHandler(l logger.Logger, s services.Storager) http.Hand
 		switch jq.GetMetricaType() {
 		case "gauge":
 			g, _ := value.(float64)
-			resp.Value = &g
+			resp.Value = g
 		case "counter":
 			c, _ := value.(int64)
-			resp.Delta = &c
+			resp.Delta = c
 		}
 
 		body, _ := json.Marshal(resp)
