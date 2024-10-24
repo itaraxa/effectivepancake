@@ -173,7 +173,6 @@ func JSONUpdateMemStorageHandler(l logger.Logger, s services.Storager) http.Hand
 			g, _ := value.(float64)
 			resp.Value = &g
 		case "counter":
-			resp := jq
 			c, _ := value.(int64)
 			resp.Delta = &c
 		}
