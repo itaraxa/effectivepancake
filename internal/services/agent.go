@@ -131,25 +131,6 @@ func collectMetrics(pollCount int64) (Metricer, error) {
 	return jms, nil
 }
 
-func collectMetricsJSON(pollCount int64) (Metricer, error) {
-	jms := &models.JSONMetrics{}
-
-	err := jms.AddPollCount(pollCount)
-	if err != nil {
-		return jms, errors.ErrAddPollCount
-	}
-	err = jms.AddData(collectRuntimeMetrics())
-	if err != nil {
-		return jms, errors.ErrAddData
-	}
-	err = jms.AddData(collectOtherMetrics())
-	if err != nil {
-		return jms, errors.ErrAddData
-	}
-
-	return jms, nil
-}
-
 /*
 Collecting metrics from runtime package.
 Collected metrics:
