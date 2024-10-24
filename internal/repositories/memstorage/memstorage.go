@@ -57,7 +57,7 @@ func (m *MemStorage) AddCounter(metricName string, value int64) error {
 }
 
 /*
-Get metrica value grom MemStorage by metrica name
+GetMetrica Get metrica value grom MemStorage by metrica name
 
 Args:
 
@@ -92,6 +92,19 @@ func (m *MemStorage) GetMetrica(metricaType string, metricaName string) (string,
 	}
 }
 
+/*
+GetMetricaValue return value of metrica with type metricaType and name metricaName
+
+Args:
+
+	metricaType string: type of requested metrica
+	metricaName string: name of requested metrica
+
+Returns:
+
+	interface{}: float64 for gauge or int64 for counter
+	error: nil or error if metrica cannot be getted
+*/
 func (m *MemStorage) GetMetricaValue(metricaType string, metricaName string) (interface{}, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
