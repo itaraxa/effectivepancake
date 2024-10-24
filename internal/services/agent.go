@@ -19,10 +19,10 @@ import (
 
 // Интерфейс для работы с метриками на агенте
 type Metricer interface {
-	AddData(data []models.Metric) error
-	AddPollCount(pollCount uint64) error
+	AddData(data []models.JSONMetric) error
+	AddPollCount(pollCount int64) error
 	String() string
-	GetData() []models.Metric
+	GetData() []models.JSONMetric
 }
 
 /*
@@ -40,7 +40,13 @@ Returns:
 */
 func sendMetricsToServerQueryStr(ms Metricer, serverURL string, client *http.Client) error {
 	for _, m := range ms.GetData() {
-		res, err := client.Post(fmt.Sprintf("http://%s/update/%s/%s/%s", serverURL, m.MType, m.ID, m.Value), "text/plain", nil)
+		queryString := ""
+		if m.MType == "gauge" {
+			queryString = fmt.Sprintf("http://%s/update/%s/%s/%f", serverURL, m.MType, m.ID, m.Value)
+		} else if m.MType == "counter" {
+			queryString = fmt.Sprintf("http://%s/update/%s/%s/%d", serverURL, m.MType, m.ID, m.Delta)
+		}
+		res, err := client.Post(queryString, "text/plain", nil)
 		if err != nil {
 			return errors.ErrSendingMetricsToServer
 		}
@@ -68,12 +74,19 @@ Returns:
 
 	error: nil or error, encountered during sending data
 */
-func sendMetricaToServerJSON(ms Metricer, serverURL string, client *http.Client) error {
+func sendMetricaToServerJSON(l logger.Logger, ms Metricer, serverURL string, client *http.Client) error {
 	for _, m := range ms.GetData() {
+		if m.Delta == 0 && m.Value == 0.0 {
+			continue
+		}
+
 		jsondata, err := json.Marshal(m)
 		if err != nil {
 			return err
 		}
+
+		l.Debug("json data for send", "string representation", string(jsondata))
+
 		resp, err := client.Post(fmt.Sprintf("http://%s/update/", serverURL), "application/json", bytes.NewBuffer(jsondata))
 		if err != nil {
 			return errors.ErrSendingMetricsToServer
@@ -99,23 +112,42 @@ Returns:
 	*models.Metrica: pointer to models.Metrics structure, which store metrica data on Agent
 	error: nil
 */
-func collectMetrics(pollCount uint64) (Metricer, error) {
-	ms := &models.Metrics{}
+func collectMetrics(pollCount int64) (Metricer, error) {
+	jms := &models.JSONMetrics{}
 
-	err := ms.AddPollCount(pollCount)
+	err := jms.AddPollCount(pollCount)
 	if err != nil {
-		return ms, errors.ErrAddPollCount
+		return jms, errors.ErrAddPollCount
 	}
-	err = ms.AddData(collectRuntimeMetrics())
+	err = jms.AddData(collectRuntimeMetrics())
 	if err != nil {
-		return ms, errors.ErrAddData
+		return jms, errors.ErrAddData
 	}
-	err = ms.AddData(collectOtherMetrics())
+	err = jms.AddData(collectOtherMetrics())
 	if err != nil {
-		return ms, errors.ErrAddData
+		return jms, errors.ErrAddData
 	}
 
-	return ms, nil
+	return jms, nil
+}
+
+func collectMetricsJSON(pollCount int64) (Metricer, error) {
+	jms := &models.JSONMetrics{}
+
+	err := jms.AddPollCount(pollCount)
+	if err != nil {
+		return jms, errors.ErrAddPollCount
+	}
+	err = jms.AddData(collectRuntimeMetrics())
+	if err != nil {
+		return jms, errors.ErrAddData
+	}
+	err = jms.AddData(collectOtherMetrics())
+	if err != nil {
+		return jms, errors.ErrAddData
+	}
+
+	return jms, nil
 }
 
 /*
@@ -157,38 +189,38 @@ Returns:
 
 	[]models.Metrica: slice of models.Metrica objects
 */
-func collectRuntimeMetrics() []models.Metric {
+func collectRuntimeMetrics() []models.JSONMetric {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 
-	out := []models.Metric{}
-	out = append(out, models.Metric{ID: "Alloc", MType: "gauge", Value: fmt.Sprintf("%d", memStats.Alloc)})
-	out = append(out, models.Metric{ID: "BuckHashSys", MType: "gauge", Value: fmt.Sprintf("%d", memStats.BuckHashSys)})
-	out = append(out, models.Metric{ID: "Frees", MType: "gauge", Value: fmt.Sprintf("%d", memStats.Frees)})
-	out = append(out, models.Metric{ID: "GCCPUFraction", MType: "gauge", Value: fmt.Sprintf("%f", memStats.GCCPUFraction)})
-	out = append(out, models.Metric{ID: "GCSys", MType: "gauge", Value: fmt.Sprintf("%d", memStats.GCSys)})
-	out = append(out, models.Metric{ID: "HeapAlloc", MType: "gauge", Value: fmt.Sprintf("%d", memStats.HeapAlloc)})
-	out = append(out, models.Metric{ID: "HeapIdle", MType: "gauge", Value: fmt.Sprintf("%d", memStats.HeapIdle)})
-	out = append(out, models.Metric{ID: "HeapInuse", MType: "gauge", Value: fmt.Sprintf("%d", memStats.HeapInuse)})
-	out = append(out, models.Metric{ID: "HeapObjects", MType: "gauge", Value: fmt.Sprintf("%d", memStats.HeapObjects)})
-	out = append(out, models.Metric{ID: "HeapReleased", MType: "gauge", Value: fmt.Sprintf("%d", memStats.HeapReleased)})
-	out = append(out, models.Metric{ID: "HeapSys", MType: "gauge", Value: fmt.Sprintf("%d", memStats.HeapSys)})
-	out = append(out, models.Metric{ID: "LastGC", MType: "gauge", Value: fmt.Sprintf("%d", memStats.LastGC)})
-	out = append(out, models.Metric{ID: "Lookups", MType: "gauge", Value: fmt.Sprintf("%d", memStats.Lookups)})
-	out = append(out, models.Metric{ID: "MCacheInuse", MType: "gauge", Value: fmt.Sprintf("%d", memStats.MCacheInuse)})
-	out = append(out, models.Metric{ID: "MCacheSys", MType: "gauge", Value: fmt.Sprintf("%d", memStats.MCacheSys)})
-	out = append(out, models.Metric{ID: "MSpanInuse", MType: "gauge", Value: fmt.Sprintf("%d", memStats.MSpanInuse)})
-	out = append(out, models.Metric{ID: "MSpanSys", MType: "gauge", Value: fmt.Sprintf("%d", memStats.MSpanSys)})
-	out = append(out, models.Metric{ID: "Mallocs", MType: "gauge", Value: fmt.Sprintf("%d", memStats.Mallocs)})
-	out = append(out, models.Metric{ID: "NextGC", MType: "gauge", Value: fmt.Sprintf("%d", memStats.NextGC)})
-	out = append(out, models.Metric{ID: "NumForcedGC", MType: "gauge", Value: fmt.Sprintf("%d", memStats.NumForcedGC)})
-	out = append(out, models.Metric{ID: "NumGC", MType: "gauge", Value: fmt.Sprintf("%d", memStats.NumGC)})
-	out = append(out, models.Metric{ID: "OtherSys", MType: "gauge", Value: fmt.Sprintf("%d", memStats.OtherSys)})
-	out = append(out, models.Metric{ID: "PauseTotalNs", MType: "gauge", Value: fmt.Sprintf("%d", memStats.PauseTotalNs)})
-	out = append(out, models.Metric{ID: "StackInuse", MType: "gauge", Value: fmt.Sprintf("%d", memStats.StackInuse)})
-	out = append(out, models.Metric{ID: "StackSys", MType: "gauge", Value: fmt.Sprintf("%d", memStats.StackSys)})
-	out = append(out, models.Metric{ID: "Sys", MType: "gauge", Value: fmt.Sprintf("%d", memStats.Sys)})
-	out = append(out, models.Metric{ID: "TotalAlloc", MType: "gauge", Value: fmt.Sprintf("%d", memStats.TotalAlloc)})
+	out := []models.JSONMetric{}
+	out = append(out, models.JSONMetric{ID: "Alloc", MType: "gauge", Value: float64(memStats.Alloc)})
+	out = append(out, models.JSONMetric{ID: "BuckHashSys", MType: "gauge", Value: float64(memStats.BuckHashSys)})
+	out = append(out, models.JSONMetric{ID: "Frees", MType: "gauge", Value: float64(memStats.Frees)})
+	out = append(out, models.JSONMetric{ID: "GCCPUFraction", MType: "gauge", Value: float64(memStats.GCCPUFraction)})
+	out = append(out, models.JSONMetric{ID: "GCSys", MType: "gauge", Value: float64(memStats.GCSys)})
+	out = append(out, models.JSONMetric{ID: "HeapAlloc", MType: "gauge", Value: float64(memStats.HeapAlloc)})
+	out = append(out, models.JSONMetric{ID: "HeapIdle", MType: "gauge", Value: float64(memStats.HeapIdle)})
+	out = append(out, models.JSONMetric{ID: "HeapInuse", MType: "gauge", Value: float64(memStats.HeapInuse)})
+	out = append(out, models.JSONMetric{ID: "HeapObjects", MType: "gauge", Value: float64(memStats.HeapObjects)})
+	out = append(out, models.JSONMetric{ID: "HeapReleased", MType: "gauge", Value: float64(memStats.HeapReleased)})
+	out = append(out, models.JSONMetric{ID: "HeapSys", MType: "gauge", Value: float64(memStats.HeapSys)})
+	out = append(out, models.JSONMetric{ID: "LastGC", MType: "gauge", Value: float64(memStats.LastGC)})
+	out = append(out, models.JSONMetric{ID: "Lookups", MType: "gauge", Value: float64(memStats.Lookups)})
+	out = append(out, models.JSONMetric{ID: "MCacheInuse", MType: "gauge", Value: float64(memStats.MCacheInuse)})
+	out = append(out, models.JSONMetric{ID: "MCacheSys", MType: "gauge", Value: float64(memStats.MCacheSys)})
+	out = append(out, models.JSONMetric{ID: "MSpanInuse", MType: "gauge", Value: float64(memStats.MSpanInuse)})
+	out = append(out, models.JSONMetric{ID: "MSpanSys", MType: "gauge", Value: float64(memStats.MSpanSys)})
+	out = append(out, models.JSONMetric{ID: "Mallocs", MType: "gauge", Value: float64(memStats.Mallocs)})
+	out = append(out, models.JSONMetric{ID: "NextGC", MType: "gauge", Value: float64(memStats.NextGC)})
+	out = append(out, models.JSONMetric{ID: "NumForcedGC", MType: "gauge", Value: float64(memStats.NumForcedGC)})
+	out = append(out, models.JSONMetric{ID: "NumGC", MType: "gauge", Value: float64(memStats.NumGC)})
+	out = append(out, models.JSONMetric{ID: "OtherSys", MType: "gauge", Value: float64(memStats.OtherSys)})
+	out = append(out, models.JSONMetric{ID: "PauseTotalNs", MType: "gauge", Value: float64(memStats.PauseTotalNs)})
+	out = append(out, models.JSONMetric{ID: "StackInuse", MType: "gauge", Value: float64(memStats.StackInuse)})
+	out = append(out, models.JSONMetric{ID: "StackSys", MType: "gauge", Value: float64(memStats.StackSys)})
+	out = append(out, models.JSONMetric{ID: "Sys", MType: "gauge", Value: float64(memStats.Sys)})
+	out = append(out, models.JSONMetric{ID: "TotalAlloc", MType: "gauge", Value: float64(memStats.TotalAlloc)})
 
 	return out
 }
@@ -206,13 +238,13 @@ Returns:
 
 	[]models.Metrica: slice of models.Metrica objects
 */
-func collectOtherMetrics() []models.Metric {
-	out := []models.Metric{}
+func collectOtherMetrics() []models.JSONMetric {
+	out := []models.JSONMetric{}
 
-	out = append(out, models.Metric{
+	out = append(out, models.JSONMetric{
 		ID:    "RandomValue",
 		MType: "gauge",
-		Value: fmt.Sprintf("%f", rand.Float64()),
+		Value: rand.Float64(),
 	})
 
 	return out
@@ -235,7 +267,7 @@ Returns:
 */
 func PollMetrics(wg *sync.WaitGroup, controlChan chan bool, dataChan chan Metricer, l logger.Logger, config *config.AgentConfig) {
 	defer wg.Done()
-	var pollCounter uint64 = 0
+	var pollCounter int64 = 0
 POLLING:
 	for {
 		controlChan <- false
@@ -287,7 +319,7 @@ REPORTING:
 			l.Debug("Report counter", "Value", reportCounter)
 			switch config.ReportMode {
 			case `json`:
-				err := sendMetricaToServerJSON(<-dataChan, config.AddressServer, client)
+				err := sendMetricaToServerJSON(l, <-dataChan, config.AddressServer, client)
 				if err != nil {
 					l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
 				}
