@@ -16,6 +16,7 @@ type AgentConfig struct {
 	AddressServer  string
 	LogLevel       string
 	ShowVersion    bool
+	ReportMode     string // json or raw
 }
 
 func NewAgentConfig() *AgentConfig {
@@ -24,6 +25,7 @@ func NewAgentConfig() *AgentConfig {
 		ReportInterval: 10 * time.Second,
 		AddressServer:  `localhost:8080`,
 		LogLevel:       `INFO`,
+		ReportMode:     `json`,
 	}
 }
 
@@ -31,6 +33,7 @@ func (ac *AgentConfig) ParseFlags() error {
 	flag.BoolVar(&ac.ShowVersion, `v`, false, `Show version and exit`)
 	flag.StringVar(&ac.AddressServer, `a`, `localhost:8080`, `HTTP-server endpoint address`)
 	flag.StringVar(&ac.LogLevel, `log`, `INFO`, `Set log level: INFO, DEBUG, etc.`)
+	flag.StringVar(&ac.ReportMode, `m`, `json`, `Set method to report metrics: json, raw`)
 	var p, r int64
 	flag.Int64Var(&p, `p`, 2, `metrics poll interval, seconds`)
 	flag.Int64Var(&r, `r`, 10, `metrics report interval, seconds`)
@@ -74,6 +77,11 @@ func (ac *AgentConfig) ParseEnv() error {
 	addressServer, ok := os.LookupEnv(`ADDRESS`)
 	if ok {
 		ac.AddressServer = addressServer
+	}
+
+	m, ok := os.LookupEnv(`REPORT_MODE`)
+	if ok {
+		ac.ReportMode = m
 	}
 	return nil
 }

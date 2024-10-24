@@ -1,9 +1,10 @@
 package services
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"math/rand"
 	"net/http"
 	"runtime"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/itaraxa/effectivepancake/internal/config"
 	"github.com/itaraxa/effectivepancake/internal/errors"
+	"github.com/itaraxa/effectivepancake/internal/logger"
 	"github.com/itaraxa/effectivepancake/internal/models"
 )
 
@@ -24,7 +26,7 @@ type Metricer interface {
 }
 
 /*
-Sending metrica data to server via http
+sendMetricsToServerQueryStr send metrica data to server via http. Data included into request string
 
 Args:
 
@@ -36,7 +38,7 @@ Returns:
 
 	error: nil or error, encountered during sending data
 */
-func sendMetricsToServer(ms Metricer, serverURL string, client *http.Client) error {
+func sendMetricsToServerQueryStr(ms Metricer, serverURL string, client *http.Client) error {
 	for _, m := range ms.GetData() {
 		res, err := client.Post(fmt.Sprintf("http://%s/update/%s/%s/%s", serverURL, m.MType, m.ID, m.Value), "text/plain", nil)
 		if err != nil {
@@ -50,6 +52,38 @@ func sendMetricsToServer(ms Metricer, serverURL string, client *http.Client) err
 		}
 	}
 
+	return nil
+}
+
+/*
+sendMetricaToServerJSON send metrica data to server via http POST method. Data included into request body in JSON
+
+Args:
+
+	ms Metricer: pointer to object implemented Metricer interface
+	serverURL string: endpoint of server
+	client *http.Client: pointer to httpClient object, which uses for connection to server
+
+Returns:
+
+	error: nil or error, encountered during sending data
+*/
+func sendMetricaToServerJSON(ms Metricer, serverURL string, client *http.Client) error {
+	for _, m := range ms.GetData() {
+		jsondata, err := json.Marshal(m)
+		if err != nil {
+			return err
+		}
+		resp, err := client.Post(fmt.Sprintf("http://%s/update/", serverURL), "application/json", bytes.NewBuffer(jsondata))
+		if err != nil {
+			return errors.ErrSendingMetricsToServer
+		}
+		_, err = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -192,27 +226,27 @@ Args:
 	wg *sync.WaitGroup: pointer to sync.WaitGroup for for controlling the completion of a function in a goroutine
 	controlChan chan bool: channel for receiving a stop signal
 	dataChan chan Metricer: channel for exchanging metric data
-	l *slog.Logger: pointer to logger instance
+	l logger.Logger: pointer to logger instance
 	pollInterval time.Duration
 
 Returns:
 
 	None
 */
-func PollMetrics(wg *sync.WaitGroup, controlChan chan bool, dataChan chan Metricer, l *slog.Logger, config *config.AgentConfig) {
+func PollMetrics(wg *sync.WaitGroup, controlChan chan bool, dataChan chan Metricer, l logger.Logger, config *config.AgentConfig) {
 	defer wg.Done()
 	var pollCounter uint64 = 0
 POLLING:
 	for {
 		controlChan <- false
 
-		l.Debug("Poll counter", slog.Uint64("Value", pollCounter))
+		l.Debug("Poll counter", "Value", pollCounter)
 		ms, err := collectMetrics(pollCounter)
 		if err != nil {
 			l.Error("Error collect metrics")
 		}
 		if len(dataChan) == cap(dataChan) {
-			l.Error("Error internal commnication", slog.String("error", errors.ErrChannelFull.Error()))
+			l.Error("Error internal commnication", "error", errors.ErrChannelFull.Error())
 		}
 		dataChan <- ms
 		pollCounter += 1
@@ -233,7 +267,7 @@ Args:
 	wg *sync.WaitGroup: pointer to sync.WaitGroup for for controlling the completion of a function in a goroutine
 	controlChan chan bool: channel for receiving a stop signal
 	dataChan chan Metricer: channel for exchanging metric data
-	l *slog.Logger: pointer to logger instance
+	l logger.Logger: pointer to logger instance
 	config *config.AgentConfig: pointer to config instance
 	client *http.Client: pointer to http client instance
 
@@ -241,7 +275,7 @@ Returns:
 
 	None
 */
-func ReportMetrics(wg *sync.WaitGroup, controlChan chan bool, dataChan chan Metricer, l *slog.Logger, config *config.AgentConfig, client *http.Client) {
+func ReportMetrics(wg *sync.WaitGroup, controlChan chan bool, dataChan chan Metricer, l logger.Logger, config *config.AgentConfig, client *http.Client) {
 	defer wg.Done()
 	var reportCounter uint64 = 0
 REPORTING:
@@ -250,16 +284,21 @@ REPORTING:
 
 		time.Sleep(config.ReportInterval)
 		for len(dataChan) > 0 {
-			l.Debug("Report counter", slog.Uint64("Value", reportCounter))
-			err := sendMetricsToServer(<-dataChan, config.AddressServer, client)
-			if err != nil {
-				l.Error("Error sending to server. Waiting 1 second",
-					slog.String("server", config.AddressServer),
-					slog.String("error", errors.ErrSendingMetricsToServer.Error()),
-				)
-				// Pause for next sending
-				time.Sleep(1 * time.Second)
+			l.Debug("Report counter", "Value", reportCounter)
+			switch config.ReportMode {
+			case `json`:
+				err := sendMetricaToServerJSON(<-dataChan, config.AddressServer, client)
+				if err != nil {
+					l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
+				}
+			case `raw`:
+				err := sendMetricsToServerQueryStr(<-dataChan, config.AddressServer, client)
+				if err != nil {
+					l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
+				}
 			}
+			// Pause for next sending
+			time.Sleep(1 * time.Second)
 		}
 		reportCounter++
 
