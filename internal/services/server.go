@@ -12,7 +12,7 @@ import (
 type Storager interface {
 	UpdateGauge(metricName string, value float64) error
 	AddCounter(metricName string, value int64) error
-	GetMetrica(metricaType string, metricaName string) (string, error)
+	GetMetrica(metricaType string, metricaName string) (interface{}, error)
 	GetMetricaValue(metricaType string, metricaName string) (interface{}, error)
 	String() string
 	HTML() string

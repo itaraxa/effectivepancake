@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -63,7 +64,83 @@ func GetMetrica(s services.Storager, l logger.Logger) http.HandlerFunc {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(v))
+
+		res := ""
+		switch chi.URLParam(req, "type") {
+		case "gauge":
+			res = fmt.Sprint(v.(float64))
+		case "counter":
+			res = fmt.Sprint(v.(int64))
+		}
+		_, _ = w.Write([]byte(res))
+	}
+}
+
+/*
+JSONGetMetrica wrapper function for handler, which return metrica value
+
+Args:
+
+	s services.Storager: An object implementing the service.Storager interface
+	l logger.Logger: logger for embedding into handler func
+
+Returns:
+
+	http.HandlerFunc
+*/
+func JSONGetMetrica(s services.Storager, l logger.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		// Checks
+		if req.Method != http.MethodPost {
+			http.Error(w, "Only POST request allowed", http.StatusMethodNotAllowed)
+			l.Error("Only POST request allowed")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		// Processing
+		var buf bytes.Buffer
+		_, err := buf.ReadFrom(req.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			l.Error("cannot read from request body")
+			return
+		}
+		var jq models.JSONQuery
+		if err = json.Unmarshal(buf.Bytes(), &jq); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			l.Error("cannot unmarshal data", "data", buf.Bytes(), "error", err.Error())
+			return
+		}
+		l.Info("request to get metrica", "type", jq.GetMetricaType(), "name", jq.GetMetricaName())
+		v, err := s.GetMetrica(jq.GetMetricaType(), jq.GetMetricaName())
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			l.Error("cannot get metrica", "type", jq.GetMetricaType(), "name", jq.GetMetricaName())
+			return
+		}
+		switch jq.GetMetricaType() {
+		case "gauge":
+			jq.Value = v.(float64)
+		case "counter":
+			jq.Delta = v.(int64)
+		}
+
+		// Write response
+		jsonData, err := json.Marshal(jq)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			l.Error("cannot marshal data", "error", err)
+			return
+		}
+		_, err = w.Write(jsonData)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			l.Error("cannot write data to body", "error", err)
+			return
+		}
 	}
 }
 
