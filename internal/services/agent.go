@@ -93,15 +93,8 @@ func sendMetricaToServerJSON(l logger.Logger, ms MetricSender, serverURL string,
 			l.Error("cannot read responce body")
 			return err
 		}
-		// if err = json.Unmarshal(buf.Bytes(), &acc); err != nil {
-		// 	l.Error("cannot unmarshal responce body")
-		// 	return err
-		// }
-		l.Info("json data from responce", "string representation", string(buf.Bytes()))
+		l.Info("json data from responce", "string representation", buf.String())
 		resp.Body.Close()
-		// if err != nil {
-		// 	return err
-		// }
 	}
 	return nil
 }
@@ -338,15 +331,17 @@ REPORTING:
 				err := sendMetricaToServerJSON(l, <-dataChan, config.AddressServer, client)
 				if err != nil {
 					l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
+					// Pause for next sending
+					time.Sleep(1 * time.Second)
 				}
 			case `raw`:
 				err := sendMetricsToServerQueryStr(<-dataChan, config.AddressServer, client)
 				if err != nil {
 					l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
+					// Pause for next sending
+					time.Sleep(1 * time.Second)
 				}
 			}
-			// Pause for next sending
-			// time.Sleep(1 * time.Second)
 		}
 		reportCounter++
 
