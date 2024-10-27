@@ -36,6 +36,8 @@ func (aa *AgentApp) Run() {
 	aa.logger.Info("Agent started", "server", aa.config.AddressServer,
 		"poll interval", aa.config.PollInterval,
 		"report interval", aa.config.ReportInterval,
+		"log level", aa.config.LogLevel,
+		"report mode", aa.config.ReportMode,
 	)
 	defer aa.logger.Info("Agent stopped")
 

@@ -29,7 +29,7 @@ func NewZapLogger(levelString string) (logger *ZapLogger, err error) {
 
 	config := zap.Config{
 		Level:       zap.NewAtomicLevelAt(level), // Уровень логирования
-		Development: true,                        // Режим разработки (влияет на формат)
+		Development: false,                       // Режим разработки (влияет на формат)
 		Encoding:    "console",                   // Формат вывода "console" или "json"
 		EncoderConfig: zapcore.EncoderConfig{
 			TimeKey:        "time",                        // Ключ для вывода времени

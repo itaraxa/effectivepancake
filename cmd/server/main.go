@@ -56,7 +56,13 @@ Args:
 	sa *ServerApp: pointer to ServerApp structure with injected dependencies
 */
 func (sa *ServerApp) Run() {
-	sa.logger.Info("Server started", zap.String(`Listen`, sa.config.Endpoint))
+	sa.logger.Info("Server version",
+		"Version", version.ServerVersion,
+	)
+	sa.logger.Info("Server started",
+		"Listen", sa.config.Endpoint,
+		"Log level", sa.config.LogLevel,
+	)
 	defer sa.logger.Info("Server stoped")
 
 	// Ctrl+C handling
@@ -70,7 +76,7 @@ func (sa *ServerApp) Run() {
 
 	// Add middleware
 	sa.router.Use(middlewares.LoggerMiddleware(sa.logger))
-	sa.router.Use(middlewares.StatMiddleware(sa.logger, 10))
+	// sa.router.Use(middlewares.StatMiddleware(sa.logger, 10))
 
 	// Add routes
 	sa.router.Get(`/`, handlers.GetAllCurrentMetrics(sa.storage, sa.logger))
