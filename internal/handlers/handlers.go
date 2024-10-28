@@ -110,7 +110,7 @@ Returns:
 
 	http.HandlerFunc
 */
-func JSONGetMetrica(s services.MetricStorager, l logger) http.HandlerFunc {
+func JSONGetMetrica(s metricaGetter, l logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		// Checks
 		if req.Method != http.MethodPost {
@@ -118,9 +118,6 @@ func JSONGetMetrica(s services.MetricStorager, l logger) http.HandlerFunc {
 			l.Error("Only POST request allowed")
 			return
 		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
 
 		// Processing
 		var buf bytes.Buffer
@@ -130,34 +127,44 @@ func JSONGetMetrica(s services.MetricStorager, l logger) http.HandlerFunc {
 			l.Error("cannot read from request body")
 			return
 		}
-		var jq models.JSONQuery
-		if err = json.Unmarshal(buf.Bytes(), &jq); err != nil {
+		var jm models.JSONMetric
+		if err = json.Unmarshal(buf.Bytes(), &jm); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			l.Error("cannot unmarshal data", "data", buf.Bytes(), "error", err.Error())
 			return
 		}
-		l.Info("received a request to get metrica in JSON", "type", jq.GetMetricaType(), "name", jq.GetMetricaName())
-		v, err := s.GetMetrica(jq.GetMetricaType(), jq.GetMetricaName())
-		if err != nil {
+		l.Info("received a request to get metrica in JSON", "type", jm.GetMetricaType(), "name", jm.GetMetricaName())
+		valueFromStorage, err := s.GetMetrica(jm.GetMetricaType(), jm.GetMetricaName())
+		if err != nil && errors.Is(err, myErrors.ErrMetricaNotFaund) {
 			w.WriteHeader(http.StatusNotFound)
-			l.Error("cannot get metrica", "type", jq.GetMetricaType(), "name", jq.GetMetricaName(), "error", err.Error())
+			l.Error("cannot get metrica", "type", jm.GetMetricaType(), "name", jm.GetMetricaName(), "error", err.Error())
 			return
 		}
+		if err != nil {
+			http.Error(w, "unknown getting metrica error", http.StatusInternalServerError)
+			l.Error("cannot get metrica", "type", jm.GetMetricaType(), "name", jm.GetMetricaName(), "error", err.Error())
+			return
+		}
+
 		// Type switching
-		switch jq.GetMetricaType() {
+		switch jm.GetMetricaType() {
 		case "gauge":
-			jq.Value = v.(float64)
+			t := valueFromStorage.(float64)
+			jm.Value = &t
 		case "counter":
-			jq.Delta = v.(int64)
+			t := valueFromStorage.(int64)
+			jm.Delta = &t
 		}
 
 		// Write response
-		jsonData, err := json.Marshal(jq)
+		jsonData, err := json.Marshal(jm)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			l.Error("cannot marshal data", "error", err.Error())
 			return
 		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
 		_, err = w.Write(jsonData)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -250,6 +257,11 @@ func JSONUpdateHandler(l logger, s metricaStorager) http.HandlerFunc {
 		}
 		// validating request
 		// Check nil values
+		if jm.ID == "" {
+			http.Error(w, "metric name not found", http.StatusNotFound)
+			l.Error("cannot update metrica", "data", buf.String(), "error", "metric name not found")
+			return
+		}
 		if jm.Delta == nil && jm.Value == nil {
 			http.Error(w, "any metric value is not set", http.StatusBadRequest)
 			l.Error("cannot update metrica", "data", buf.String(), "error", "any metric value is not set")
@@ -269,11 +281,11 @@ func JSONUpdateHandler(l logger, s metricaStorager) http.HandlerFunc {
 		// updating metrica in storage
 		err = services.JSONUpdateMetrica(jm, s)
 		if err != nil && (errors.Is(err, myErrors.ErrParseGauge) || errors.Is(err, myErrors.ErrParseCounter)) {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			l.Error("the value is not of the specified type", "json query", jm.String(), "error", err.Error())
 		}
 		if err != nil && errors.Is(err, myErrors.ErrBadType) {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			l.Error("unknown metrica type update error", "json query", jm.String(), "error", err.Error())
 			return
 		}
