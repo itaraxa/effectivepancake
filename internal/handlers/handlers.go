@@ -9,10 +9,32 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	myErrors "github.com/itaraxa/effectivepancake/internal/errors"
-	"github.com/itaraxa/effectivepancake/internal/logger"
 	"github.com/itaraxa/effectivepancake/internal/models"
 	"github.com/itaraxa/effectivepancake/internal/services"
 )
+
+type logger interface {
+	Error(msg string, fields ...interface{})
+	Info(msg string, fields ...interface{})
+}
+
+type metricaStorager interface {
+	metricaGetter
+	metricaUpdater
+}
+
+type metricaGetter interface {
+	GetMetrica(string, string) (interface{}, error)
+}
+
+type metricaUpdater interface {
+	UpdateGauge(metricName string, value float64) error
+	AddCounter(metricName string, value int64) error
+}
+
+type metricaPrinter interface {
+	HTML() string
+}
 
 /*
 Wrapper function for handler, what return all metrica values in HTML view
@@ -25,19 +47,19 @@ Returns:
 
 	http.HandlerFunc
 */
-func GetAllCurrentMetrics(s services.Storager, l logger.Logger) http.HandlerFunc {
+func GetAllCurrentMetrics(s metricaPrinter, l logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodGet {
-			http.Error(w, "Uncorrect request type != GET", http.StatusMethodNotAllowed)
+			http.Error(w, "uncorrect request type != GET", http.StatusMethodNotAllowed)
 			return
 		}
-
+		l.Info("received a request to retrieve the current value of all metrics")
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
 
 		_, err := w.Write([]byte(s.HTML()))
 		if err != nil {
-			l.Error("Cannot write HTML to response body")
+			l.Error("cannot write HTML to response body")
 		}
 	}
 }
@@ -53,14 +75,14 @@ Returns:
 
 	http.HandlerFunc
 */
-func GetMetrica(s services.Storager, l logger.Logger) http.HandlerFunc {
+func GetMetrica(s metricaGetter, l logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
-		l.Info("get metrica", "type", chi.URLParam(req, "type"), "name", chi.URLParam(req, "name"))
+		l.Info("received a request to get metrica", "type", chi.URLParam(req, "type"), "name", chi.URLParam(req, "name"))
 		v, err := s.GetMetrica(chi.URLParam(req, "type"), chi.URLParam(req, "name"))
 		if err != nil {
 			w.WriteHeader(http.StatusNotFound)
-			l.Error("cannot get metrica", "type", chi.URLParam(req, "type"), "name", chi.URLParam(req, "name"))
+			l.Error("cannot get metrica", "type", chi.URLParam(req, "type"), "name", chi.URLParam(req, "name"), "error", err.Error())
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -88,7 +110,7 @@ Returns:
 
 	http.HandlerFunc
 */
-func JSONGetMetrica(s services.Storager, l logger.Logger) http.HandlerFunc {
+func JSONGetMetrica(s services.MetricStorager, l logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		// Checks
 		if req.Method != http.MethodPost {
@@ -114,13 +136,14 @@ func JSONGetMetrica(s services.Storager, l logger.Logger) http.HandlerFunc {
 			l.Error("cannot unmarshal data", "data", buf.Bytes(), "error", err.Error())
 			return
 		}
-		l.Info("request to get metrica", "type", jq.GetMetricaType(), "name", jq.GetMetricaName())
+		l.Info("received a request to get metrica in JSON", "type", jq.GetMetricaType(), "name", jq.GetMetricaName())
 		v, err := s.GetMetrica(jq.GetMetricaType(), jq.GetMetricaName())
 		if err != nil {
 			w.WriteHeader(http.StatusNotFound)
-			l.Error("cannot get metrica", "type", jq.GetMetricaType(), "name", jq.GetMetricaName())
+			l.Error("cannot get metrica", "type", jq.GetMetricaType(), "name", jq.GetMetricaName(), "error", err.Error())
 			return
 		}
+		// Type switching
 		switch jq.GetMetricaType() {
 		case "gauge":
 			jq.Value = v.(float64)
@@ -132,13 +155,13 @@ func JSONGetMetrica(s services.Storager, l logger.Logger) http.HandlerFunc {
 		jsonData, err := json.Marshal(jq)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			l.Error("cannot marshal data", "error", err)
+			l.Error("cannot marshal data", "error", err.Error())
 			return
 		}
 		_, err = w.Write(jsonData)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			l.Error("cannot write data to body", "error", err)
+			l.Error("cannot write data to body", "error", err.Error())
 			return
 		}
 	}
@@ -155,7 +178,7 @@ Returns:
 
 	http.HandlerFunc
 */
-func UpdateMemStorageHandler(l logger.Logger, s services.Storager) http.HandlerFunc {
+func UpdateMemStorageHandler(l logger, s metricaUpdater) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		// Checks
 		if req.Method != http.MethodPost {
@@ -202,7 +225,7 @@ func UpdateMemStorageHandler(l logger.Logger, s services.Storager) http.HandlerF
 	}
 }
 
-func JSONUpdateMemStorageHandler(l logger.Logger, s services.Storager) http.HandlerFunc {
+func JSONUpdateMemStorageHandler(l logger, s metricaStorager) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		// Checks
 		if req.Method != http.MethodPost {
@@ -238,7 +261,7 @@ func JSONUpdateMemStorageHandler(l logger.Logger, s services.Storager) http.Hand
 		}
 
 		// Response
-		value, err := s.GetMetricaValue(jq.GetMetricaType(), jq.GetMetricaName())
+		value, err := s.GetMetrica(jq.GetMetricaType(), jq.GetMetricaName())
 		if err != nil {
 			http.Error(w, "get metrica from storage error", http.StatusInternalServerError)
 			l.Error("get metrica from storage error", "json query", jq.String(), "error", err.Error())

@@ -8,12 +8,23 @@ import (
 	"github.com/itaraxa/effectivepancake/internal/models"
 )
 
-// Интерфейс для описания взаимодействия с хранилищем метрик
-type Storager interface {
+// Интерфейсы для описания взаимодействия с хранилищем метрик
+type MetricStorager interface {
+	MetricGetter
+	MetricUpdater
+	MetricPrinter
+}
+
+type MetricUpdater interface {
 	UpdateGauge(metricName string, value float64) error
 	AddCounter(metricName string, value int64) error
+}
+
+type MetricGetter interface {
 	GetMetrica(metricaType string, metricaName string) (interface{}, error)
-	GetMetricaValue(metricaType string, metricaName string) (interface{}, error)
+}
+
+type MetricPrinter interface {
 	String() string
 	HTML() string
 }
@@ -81,7 +92,7 @@ Returns:
 
 	error: nil or error, if occurred
 */
-func UpdateMetrica(q Querier, s Storager) error {
+func UpdateMetrica(q Querier, s MetricUpdater) error {
 	switch q.GetMetricaType() {
 	case "gauge":
 		g, err := strconv.ParseFloat(q.GetMetricaRawValue(), 64)
@@ -107,7 +118,7 @@ func UpdateMetrica(q Querier, s Storager) error {
 	return nil
 }
 
-func JSONUpdateMetrica(jq JSONQuerier, s Storager) error {
+func JSONUpdateMetrica(jq JSONQuerier, s MetricUpdater) error {
 	switch jq.GetMetricaType() {
 	case "gauge":
 		err := s.UpdateGauge(jq.GetMetricaName(), jq.GetMetricaValue().(float64))
