@@ -8,16 +8,29 @@ import (
 	"github.com/itaraxa/effectivepancake/internal/models"
 )
 
-// Интерфейс для описания взаимодействия с хранилищем метрик
-type Storager interface {
+// Интерфейсы для описания взаимодействия с хранилищем метрик
+type MetricStorager interface {
+	MetricGetter
+	MetricUpdater
+	MetricPrinter
+}
+
+type MetricUpdater interface {
 	UpdateGauge(metricName string, value float64) error
 	AddCounter(metricName string, value int64) error
-	GetMetrica(metricaType string, metricaName string) (string, error)
+}
+
+type MetricGetter interface {
+	GetMetrica(metricaType string, metricaName string) (interface{}, error)
+}
+
+type MetricPrinter interface {
 	String() string
 	HTML() string
 }
 
 // Интерфейс для описания взаимодействия с запросом на обновление метрики
+// TO-DO: move from Qury to Metrica
 type Querier interface {
 	GetMetricaType() string
 	SetMetricaType(string) error
@@ -26,6 +39,18 @@ type Querier interface {
 	GetMetricaRawValue() string
 	SetMetricaRawValue(string) error
 	String() string
+}
+
+type StringMetricaQuerier interface {
+	SetMetricaRawValue(string) error
+	String() string
+}
+
+type JSONMetricaQuerier interface {
+	GetMetricaType() string
+	GetMetricaName() string
+	GetMetricaValue() *float64
+	GetMetricaCounter() *int64
 }
 
 /*
@@ -73,7 +98,7 @@ Returns:
 
 	error: nil or error, if occurred
 */
-func UpdateMetrica(q Querier, s Storager) error {
+func UpdateMetrica(q Querier, s MetricUpdater) error {
 	switch q.GetMetricaType() {
 	case "gauge":
 		g, err := strconv.ParseFloat(q.GetMetricaRawValue(), 64)
@@ -90,6 +115,24 @@ func UpdateMetrica(q Querier, s Storager) error {
 			return errors.ErrParseCounter
 		}
 		err = s.AddCounter(q.GetMetricName(), int64(c))
+		if err != nil {
+			return errors.ErrAddCounter
+		}
+	default:
+		return errors.ErrBadType
+	}
+	return nil
+}
+
+func JSONUpdateMetrica(jmq JSONMetricaQuerier, s MetricUpdater) error {
+	switch jmq.GetMetricaType() {
+	case "gauge":
+		err := s.UpdateGauge(jmq.GetMetricaName(), *jmq.GetMetricaValue())
+		if err != nil {
+			return errors.ErrUpdateGauge
+		}
+	case "counter":
+		err := s.AddCounter(jmq.GetMetricaName(), *jmq.GetMetricaCounter())
 		if err != nil {
 			return errors.ErrAddCounter
 		}

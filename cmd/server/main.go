@@ -17,6 +17,7 @@ import (
 	"github.com/itaraxa/effectivepancake/internal/version"
 )
 
+// Structure for embedding dependencies into the server app
 type ServerApp struct {
 	logger  logger.Logger
 	storage *memstorage.MemStorage
@@ -24,6 +25,20 @@ type ServerApp struct {
 	config  *config.ServerConfig
 }
 
+/*
+NewServerApp creates an empty instance of the serverApp structure
+
+Args:
+
+	logger logger.Logger: object, implementing the logger.Logger interface
+	storage *memstorage.MemStorage: pointer to memstorage.MemStorage object
+	router *chi.Mux: http router
+	config  *config.ServerConfig: pointer to config.ServerConfig instance
+
+Returns:
+
+	*ServerApp: pointer to the ServerApp instance
+*/
 func NewServerApp(logger logger.Logger, storage *memstorage.MemStorage, router *chi.Mux, config *config.ServerConfig) *ServerApp {
 	return &ServerApp{
 		logger:  logger,
@@ -33,8 +48,21 @@ func NewServerApp(logger logger.Logger, storage *memstorage.MemStorage, router *
 	}
 }
 
+/*
+Run function start a logging and http-routing processes
+
+Args:
+
+	sa *ServerApp: pointer to ServerApp structure with injected dependencies
+*/
 func (sa *ServerApp) Run() {
-	sa.logger.Info("Server started", zap.String(`Listen`, sa.config.Endpoint))
+	sa.logger.Info("Server version",
+		"Version", version.ServerVersion,
+	)
+	sa.logger.Info("Server started",
+		"Listen", sa.config.Endpoint,
+		"Log level", sa.config.LogLevel,
+	)
 	defer sa.logger.Info("Server stoped")
 
 	// Ctrl+C handling
@@ -48,12 +76,14 @@ func (sa *ServerApp) Run() {
 
 	// Add middleware
 	sa.router.Use(middlewares.LoggerMiddleware(sa.logger))
-	sa.router.Use(middlewares.StatMiddleware(sa.logger, 10))
+	// sa.router.Use(middlewares.StatMiddleware(sa.logger, 10))
 
 	// Add routes
 	sa.router.Get(`/`, handlers.GetAllCurrentMetrics(sa.storage, sa.logger))
 	sa.router.Get(`/value/{type}/{name}`, handlers.GetMetrica(sa.storage, sa.logger))
-	sa.router.Post(`/update/*`, handlers.UpdateMemStorageHandler(sa.logger, sa.storage))
+	sa.router.Post(`/value/`, handlers.JSONGetMetrica(sa.storage, sa.logger))
+	sa.router.Post(`/update/`, handlers.JSONUpdateHandler(sa.logger, sa.storage))
+	sa.router.Post(`/update/*`, handlers.UpdateHandler(sa.logger, sa.storage))
 
 	// Start router
 	sa.logger.Info("Start router")

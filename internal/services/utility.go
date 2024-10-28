@@ -6,6 +6,6 @@ func ShowQuery(q Querier) {
 	fmt.Println(q.String())
 }
 
-func ShowStorage(s Storager) {
+func ShowStorage(s MetricPrinter) {
 	fmt.Println(s.String())
 }

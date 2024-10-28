@@ -29,7 +29,7 @@ func NewZapLogger(levelString string) (logger *ZapLogger, err error) {
 
 	config := zap.Config{
 		Level:       zap.NewAtomicLevelAt(level), // Уровень логирования
-		Development: true,                        // Режим разработки (влияет на формат)
+		Development: false,                       // Режим разработки (влияет на формат)
 		Encoding:    "console",                   // Формат вывода "console" или "json"
 		EncoderConfig: zapcore.EncoderConfig{
 			TimeKey:        "time",                        // Ключ для вывода времени
@@ -48,7 +48,7 @@ func NewZapLogger(levelString string) (logger *ZapLogger, err error) {
 		ErrorOutputPaths: []string{"stderr"}, // Куда выводить ошибки
 	}
 
-	l, err := config.Build()
+	l, err := config.Build(zap.AddCaller(), zap.AddCallerSkip(1))
 	if err != nil {
 		return
 	}
@@ -73,7 +73,8 @@ func (zl *ZapLogger) Error(msg string, fields ...interface{}) {
 }
 
 func (zl *ZapLogger) Sync() {
-	zl.logger.Sync()
+	_ = zl.logger.Sync()
+
 }
 
 // Вспомогательная функция для преобразования полей в zap.Field

@@ -50,13 +50,13 @@ func LoggerMiddleware(logger logger.Logger) func(next http.Handler) http.Handler
 			// Request
 			start := time.Now()
 			wrappedWriter := &responseWriterWrapper{ResponseWriter: w, statusCode: http.StatusOK}
-			logger.Debug("Request received", "method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr)
+			logger.Info("Request received", "method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr)
 
 			// Doing next middleware
 			next.ServeHTTP(wrappedWriter, r)
 
 			// Response
-			logger.Debug("Request completed", "method", r.Method, "path", r.URL.Path, "status", wrappedWriter.statusCode, "duration", time.Since(start))
+			logger.Info("Request completed", "method", r.Method, "path", r.URL.Path, "status", wrappedWriter.statusCode, "duration", time.Since(start))
 		})
 	}
 }

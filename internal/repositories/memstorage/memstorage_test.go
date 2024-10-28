@@ -168,7 +168,7 @@ func TestMemStorage_GetMetrica(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    string
+		want    interface{}
 		wantErr bool
 	}{
 		{
@@ -178,6 +178,7 @@ func TestMemStorage_GetMetrica(t *testing.T) {
 				metricaType: `gauge`,
 				metricaName: `test`,
 			},
+			want:    nil,
 			wantErr: true,
 		},
 		{
@@ -189,7 +190,7 @@ func TestMemStorage_GetMetrica(t *testing.T) {
 				metricaType: `gauge`,
 				metricaName: `test`,
 			},
-			want:    `3.14`,
+			want:    3.14,
 			wantErr: false,
 		},
 		{
@@ -201,7 +202,7 @@ func TestMemStorage_GetMetrica(t *testing.T) {
 				metricaType: `counter`,
 				metricaName: `test`,
 			},
-			want:    `42`,
+			want:    int64(42),
 			wantErr: false,
 		},
 	}
