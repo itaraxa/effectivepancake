@@ -13,16 +13,31 @@ import (
 
 	"github.com/itaraxa/effectivepancake/internal/config"
 	"github.com/itaraxa/effectivepancake/internal/errors"
-	"github.com/itaraxa/effectivepancake/internal/logger"
 	"github.com/itaraxa/effectivepancake/internal/models"
 )
 
 // Интерфейс для работы с метриками на агенте
-type MetricSender interface {
+type MetricsAddGetter interface {
+	MetricsAdderr
+	MetricsGetter
+}
+
+type MetricsAdderr interface {
 	AddData(data []models.JSONMetric) error
 	AddPollCount(pollCount int64) error
-	String() string
+}
+
+type MetricsGetter interface {
 	GetData() []models.JSONMetric
+}
+
+type MetricStringer interface {
+	String() string
+}
+
+type logger interface {
+	Error(msg string, fields ...interface{})
+	Info(msg string, fields ...interface{})
 }
 
 /*
@@ -30,7 +45,7 @@ sendMetricsToServerQueryStr send metrica data to server via http. Data included 
 
 Args:
 
-	ms MetricSender: pointer to object implemented MetricSender interface
+	ms MetricsGetter: pointer to object implemented MetricsGetter interface
 	serverURL string: endpoint of server
 	client *http.Client: pointer to httpClient object, which uses for connection to server
 
@@ -38,7 +53,7 @@ Returns:
 
 	error: nil or error, encountered during sending data
 */
-func sendMetricsToServerQueryStr(ms MetricSender, serverURL string, client *http.Client) error {
+func sendMetricsToServerQueryStr(ms MetricsGetter, serverURL string, client *http.Client) error {
 	for _, m := range ms.GetData() {
 		queryString := ""
 		if m.MType == "gauge" {
@@ -66,7 +81,8 @@ sendMetricaToServerJSON send metrica data to server via http POST method. Data i
 
 Args:
 
-	ms MetricSender: pointer to object implemented MetricSender interface
+	l logger: implementation of logger interface
+	ms MetricsGetter: pointer to object implemented MetricsGetter interface
 	serverURL string: endpoint of server
 	client *http.Client: pointer to httpClient object, which uses for connection to server
 
@@ -74,7 +90,7 @@ Returns:
 
 	error: nil or error, encountered during sending data
 */
-func sendMetricaToServerJSON(l logger.Logger, ms MetricSender, serverURL string, client *http.Client) error {
+func sendMetricaToServerJSON(l logger, ms MetricsGetter, serverURL string, client *http.Client) error {
 	for _, m := range ms.GetData() {
 		jsonDataReq, err := json.Marshal(m)
 		if err != nil {
@@ -100,6 +116,80 @@ func sendMetricaToServerJSON(l logger.Logger, ms MetricSender, serverURL string,
 }
 
 /*
+sendMetricaToServerJSONgzip send metrica data to server via http POST method. Data included into request body in compressed JSON.
+The response is checked for compression, and based on the result, it is decoded accordingly.
+
+Args:
+
+	l logger: implementation of logger-interface
+	ms MetricsGetter: pointer to object implemented MetricsGetter interface
+	serverURL string: endpoint of server
+	client *http.Client: pointer to httpClient object, which uses for connection to server
+
+Returns:
+
+	error: nil or error, encountered during sending data
+*/
+func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, client *http.Client) error {
+	for _, m := range ms.GetData() {
+		jsonDataReq, err := json.Marshal(m)
+		if err != nil {
+			return err
+		}
+
+		jsonGzipDataReq, err := compress(jsonDataReq)
+		if err != nil {
+			l.Error("cannot compress data", "error", err.Error())
+		}
+		l.Info("json data for send compressd", "string representation", string(jsonDataReq), "compress ratio", float64(len(jsonDataReq))/float64(len(jsonGzipDataReq)))
+		req, err := http.NewRequest(`POST`, fmt.Sprintf("http://%s/update/", serverURL), bytes.NewBuffer(jsonGzipDataReq))
+		req.Header.Set("Accept-Encoding", "gzip")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Encoding", "gzip")
+		if err != nil {
+			l.Error("cannot create request", "error", err.Error())
+			return err
+		}
+
+		start := time.Now()
+		resp, err := client.Do(req)
+		if err != nil {
+			return errors.ErrSendingMetricsToServer
+		}
+		defer resp.Body.Close()
+
+		switch {
+		// get compressed data from server
+		case resp.StatusCode == http.StatusOK && resp.Header.Get("Content-Encoding") == `gzip`:
+			var buf bytes.Buffer
+			_, err = buf.ReadFrom(resp.Body)
+			if err != nil {
+				l.Error("cannot read responce body")
+				return errors.ErrGettingAnswerFromServer
+			}
+			data, err := decompress(buf.Bytes())
+			if err != nil {
+				l.Error("cannot decompress responce body")
+				return errors.ErrGettingAnswerFromServer
+			}
+			l.Info("json data from responce", "string representation", string(data), "duration", time.Since(start))
+		// get uncompressed data from server
+		case resp.StatusCode == http.StatusOK && resp.Header.Get("Content-Encoding") == "":
+			var buf bytes.Buffer
+			_, err = buf.ReadFrom(resp.Body)
+			if err != nil {
+				l.Error("cannot read responce body")
+				return errors.ErrGettingAnswerFromServer
+			}
+			l.Info("json data from responce", "string representation", buf.String(), "duration", time.Since(start))
+		default:
+			l.Info("received a response with an error code", "status code", resp.StatusCode, "duration", time.Since(start))
+		}
+	}
+	return nil
+}
+
+/*
 Collecting metrics. This function agregates and executes all ways for collecting metrica
 
 Args:
@@ -111,7 +201,7 @@ Returns:
 	*models.Metrica: pointer to models.Metrics structure, which store metrica data on Agent
 	error: nil
 */
-func collectMetrics(pollCount int64) (MetricSender, error) {
+func collectMetrics(pollCount int64) (MetricsAddGetter, error) {
 	jms := &models.JSONMetrics{}
 
 	err := jms.AddPollCount(pollCount)
@@ -274,7 +364,7 @@ Returns:
 
 	None
 */
-func PollMetrics(wg *sync.WaitGroup, controlChan chan bool, dataChan chan MetricSender, l logger.Logger, config *config.AgentConfig) {
+func PollMetrics(wg *sync.WaitGroup, controlChan chan bool, dataChan chan MetricsAddGetter, l logger, config *config.AgentConfig) {
 	defer wg.Done()
 	var pollCounter int64 = 0
 POLLING:
@@ -316,7 +406,7 @@ Returns:
 
 	None
 */
-func ReportMetrics(wg *sync.WaitGroup, controlChan chan bool, dataChan chan MetricSender, l logger.Logger, config *config.AgentConfig, client *http.Client) {
+func ReportMetrics(wg *sync.WaitGroup, controlChan chan bool, dataChan chan MetricsAddGetter, l logger, config *config.AgentConfig, client *http.Client) {
 	defer wg.Done()
 	var reportCounter uint64 = 0
 REPORTING:
@@ -326,15 +416,22 @@ REPORTING:
 		time.Sleep(config.ReportInterval)
 		for len(dataChan) > 0 {
 			l.Info("Report counter", "Value", reportCounter)
-			switch config.ReportMode {
-			case `json`:
+			switch {
+			case config.ReportMode == `json` && config.Compress == `gzip`:
+				err := sendMetricaToServerJSONgzip(l, <-dataChan, config.AddressServer, client)
+				if err != nil {
+					l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
+					// Pause for next sending
+					time.Sleep(1 * time.Second)
+				}
+			case config.ReportMode == `json` && config.Compress == `none`:
 				err := sendMetricaToServerJSON(l, <-dataChan, config.AddressServer, client)
 				if err != nil {
 					l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
 					// Pause for next sending
 					time.Sleep(1 * time.Second)
 				}
-			case `raw`:
+			case config.ReportMode == `raw`:
 				err := sendMetricsToServerQueryStr(<-dataChan, config.AddressServer, client)
 				if err != nil {
 					l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())

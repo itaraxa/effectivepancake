@@ -42,7 +42,7 @@ func (aa *AgentApp) Run() {
 	defer aa.logger.Info("Agent stopped")
 
 	var wg sync.WaitGroup
-	msCh := make(chan services.MetricSender, aa.config.ReportInterval/aa.config.PollInterval+1) // создаем канал для обмена данными между сборщиком и отправщиком
+	msCh := make(chan services.MetricsAddGetter, aa.config.ReportInterval/aa.config.PollInterval+1) // создаем канал для обмена данными между сборщиком и отправщиком
 	defer close(msCh)
 
 	// Ctrl+C handling
