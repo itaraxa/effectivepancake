@@ -48,7 +48,7 @@ func NewZapLogger(levelString string) (logger *ZapLogger, err error) {
 		ErrorOutputPaths: []string{"stderr"}, // Куда выводить ошибки
 	}
 
-	l, err := config.Build()
+	l, err := config.Build(zap.AddCaller(), zap.AddCallerSkip(1))
 	if err != nil {
 		return
 	}
