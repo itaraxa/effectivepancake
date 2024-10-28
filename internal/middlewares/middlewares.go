@@ -1,13 +1,20 @@
 package middlewares
 
 import (
+	"compress/gzip"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
-
-	"github.com/itaraxa/effectivepancake/internal/logger"
 )
+
+type logger interface {
+	Debug(msg string, fields ...interface{})
+	Info(msg string, fields ...interface{})
+	Error(msg string, fields ...interface{})
+}
 
 /*
 Helper structure for the middleware function
@@ -38,25 +45,25 @@ Middleware function for logging requests
 
 Args:
 
-	logger *slog.logger: pointer to logger
+	l logger: implementation of logger interface
 
 Returns:
 
 	func(next http.Handler) http.Handler
 */
-func LoggerMiddleware(logger logger.Logger) func(next http.Handler) http.Handler {
+func LoggerMiddleware(l logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Request
 			start := time.Now()
 			wrappedWriter := &responseWriterWrapper{ResponseWriter: w, statusCode: http.StatusOK}
-			logger.Info("Request received", "method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr)
+			l.Info("Request received", "method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr)
 
 			// Doing next middleware
 			next.ServeHTTP(wrappedWriter, r)
 
 			// Response
-			logger.Info("Request completed", "method", r.Method, "path", r.URL.Path, "status", wrappedWriter.statusCode, "duration", time.Since(start))
+			l.Info("Request completed", "method", r.Method, "path", r.URL.Path, "status", wrappedWriter.statusCode, "duration", time.Since(start))
 		})
 	}
 }
@@ -107,14 +114,14 @@ Middleware function for gathering statistics about requests. Collect status and 
 
 Args:
 
-	logger *slog.Logger: the logger for outputting stat information
+	l logger: implementation of logger interface
 	logInterval int: the number of requests to output information after
 
 Returns:
 
 	func(next http.Handler) http.Handler
 */
-func StatMiddleware(logger logger.Logger, logInterval int) func(next http.Handler) http.Handler {
+func StatMiddleware(l logger, logInterval int) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			wrappedWriter := &responseWriterWrapper{ResponseWriter: w, statusCode: http.StatusOK}
@@ -126,8 +133,70 @@ func StatMiddleware(logger logger.Logger, logInterval int) func(next http.Handle
 			stat.statType[r.Method] += 1
 			stat.statCode[wrappedWriter.statusCode] += 1
 			if stat.counter%logInterval == 0 {
-				logger.Info("Request stat:", "counter", stat.counter, "Type stat", fmt.Sprintf("%v", stat.statType), "StatusCode stat", fmt.Sprintf("%v", stat.statCode))
+				l.Info("Request stat:", "counter", stat.counter, "Type stat", fmt.Sprintf("%v", stat.statType), "StatusCode stat", fmt.Sprintf("%v", stat.statCode))
 			}
+		})
+	}
+}
+
+type gzipWriter struct {
+	http.ResponseWriter
+	Writer io.Writer
+}
+
+func (w gzipWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b)
+}
+
+func CompressResponceMiddleware(l logger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+				l.Debug("Responce will not compressed")
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			if r.Header.Get("Content-Type") != "text/html" && r.Header.Get("Content-Type") != "application/json" {
+				l.Debug("Responce will not compressed")
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// compressing responce
+			gzw, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
+			if err != nil {
+				io.WriteString(w, err.Error())
+				l.Error("cannot compress responce", "error", err.Error())
+				return
+			}
+			defer gzw.Close()
+
+			w.Header().Set("Content-Encoding", "gzip")
+			next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gzw}, r)
+		})
+	}
+}
+
+func DecompressRequestMiddleware(l logger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Content-Encoding") != "gzip" {
+				l.Debug("Request isn't compressed")
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// decompress request
+			gzr, err := gzip.NewReader(r.Body)
+			if err != nil {
+				// TO-DO: добавить обработку ошибки - изменение статус кода ответа
+				l.Error("cannot decompress request", "error", err.Error())
+				return
+			}
+			defer gzr.Close()
+			r.Body = io.NopCloser(gzr)
+			next.ServeHTTP(w, r)
 		})
 	}
 }
