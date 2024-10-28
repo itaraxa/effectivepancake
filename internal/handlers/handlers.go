@@ -178,7 +178,7 @@ Returns:
 
 	http.HandlerFunc
 */
-func UpdateMemStorageHandler(l logger, s metricaUpdater) http.HandlerFunc {
+func UpdateHandler(l logger, s metricaUpdater) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		// Checks
 		if req.Method != http.MethodPost {
@@ -225,7 +225,7 @@ func UpdateMemStorageHandler(l logger, s metricaUpdater) http.HandlerFunc {
 	}
 }
 
-func JSONUpdateMemStorageHandler(l logger, s metricaStorager) http.HandlerFunc {
+func JSONUpdateHandler(l logger, s metricaStorager) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		// Checks
 		if req.Method != http.MethodPost {
@@ -242,39 +242,62 @@ func JSONUpdateMemStorageHandler(l logger, s metricaStorager) http.HandlerFunc {
 			l.Error("cannot read from request body")
 			return
 		}
-		var jq models.JSONQuery
-		if err = json.Unmarshal(buf.Bytes(), &jq); err != nil {
+		var jm models.JSONMetric
+		if err = json.Unmarshal(buf.Bytes(), &jm); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-			l.Error("cannot unmarshal data", "data", buf.Bytes(), "error", err.Error())
+			l.Error("cannot unmarshal data", "data", buf.String(), "error", err.Error())
+			return
+		}
+		// validating request
+		// Check nil values
+		if jm.Delta == nil && jm.Value == nil {
+			http.Error(w, "any metric value is not set", http.StatusBadRequest)
+			l.Error("cannot update metrica", "data", buf.String(), "error", "any metric value is not set")
+			return
+		}
+		if jm.Delta == nil && jm.MType == `counter` {
+			http.Error(w, "the counter delta is not set", http.StatusBadRequest)
+			l.Error("cannot update metrica", "data", buf.String(), "error", "the counter delta is not set")
+			return
+		}
+		if jm.Value == nil && jm.MType == `gauge` {
+			http.Error(w, "the gauge value is not set", http.StatusBadRequest)
+			l.Error("cannot update metrica", "data", buf.String(), "error", "the gauge value is not set")
 			return
 		}
 
-		err = services.JSONUpdateMetrica(jq, s)
+		// updating metrica in storage
+		err = services.JSONUpdateMetrica(jm, s)
 		if err != nil && (errors.Is(err, myErrors.ErrParseGauge) || errors.Is(err, myErrors.ErrParseCounter)) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-			l.Error("the value is not of the specified type", "json query", jq.String(), "error", err.Error())
+			l.Error("the value is not of the specified type", "json query", jm.String(), "error", err.Error())
+		}
+		if err != nil && errors.Is(err, myErrors.ErrBadType) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			l.Error("unknown metrica type update error", "json query", jm.String(), "error", err.Error())
+			return
 		}
 		if err != nil {
-			http.Error(w, "unknown update metrica error", http.StatusInternalServerError)
-			l.Error("unknown update metrica error", "json query", jq.String(), "error", err.Error())
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			l.Error("metrica update error", "json query", jm.String(), "error", err.Error())
 			return
 		}
 
 		// Response
-		value, err := s.GetMetrica(jq.GetMetricaType(), jq.GetMetricaName())
+		value, err := s.GetMetrica(jm.GetMetricaType(), jm.GetMetricaName())
 		if err != nil {
 			http.Error(w, "get metrica from storage error", http.StatusInternalServerError)
-			l.Error("get metrica from storage error", "json query", jq.String(), "error", err.Error())
+			l.Error("get metrica from storage error", "json query", jm.String(), "error", err.Error())
 		}
 
-		resp := jq
-		switch jq.GetMetricaType() {
+		resp := jm
+		switch jm.GetMetricaType() {
 		case "gauge":
 			g, _ := value.(float64)
-			resp.Value = g
+			resp.Value = &g
 		case "counter":
 			c, _ := value.(int64)
-			resp.Delta = c
+			resp.Delta = &c
 		}
 
 		body, _ := json.Marshal(resp)

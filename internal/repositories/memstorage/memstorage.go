@@ -93,42 +93,6 @@ func (m *MemStorage) GetMetrica(metricaType string, metricaName string) (interfa
 }
 
 /*
-GetMetricaValue return value of metrica with type metricaType and name metricaName
-
-Args:
-
-	metricaType string: type of requested metrica
-	metricaName string: name of requested metrica
-
-Returns:
-
-	interface{}: float64 for gauge or int64 for counter
-	error: nil or error if metrica cannot be getted
-*/
-func (m *MemStorage) GetMetricaValue(metricaType string, metricaName string) (interface{}, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	switch metricaType {
-	case "gauge":
-		if _, ok := m.Gauge[metricaName]; !ok {
-			return "", errors.ErrMetricaNotFaund
-		}
-		return m.Gauge[metricaName], nil
-
-	case "counter":
-		if _, ok := m.Counter[metricaName]; !ok {
-			return "", errors.ErrMetricaNotFaund
-		}
-		return m.Counter[metricaName], nil
-
-	default:
-		// case with uncorrect type of metrica
-		return "", errors.ErrMetricaNotFaund
-	}
-}
-
-/*
 Get string representation of the current state the MemStorage.
 
 Returns:

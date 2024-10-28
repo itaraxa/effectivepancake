@@ -6,6 +6,7 @@ import (
 	"sync"
 )
 
+// unit of metrica
 type JSONMetric struct {
 	ID    string   `json:"id"`              // имя метрики
 	MType string   `json:"type"`            // параметр, принимающий значение gauge или counter
@@ -13,6 +14,31 @@ type JSONMetric struct {
 	Value *float64 `json:"value,omitempty"` // значение метрики в случае передачи gauge
 }
 
+func (jm JSONMetric) String() string {
+	b, err := json.MarshalIndent(jm, "\t", "\t")
+	if err != nil {
+		return "{marshal error}"
+	}
+	return string(b)
+}
+
+func (jm JSONMetric) GetMetricaType() string {
+	return jm.MType
+}
+
+func (jm JSONMetric) GetMetricaName() string {
+	return jm.ID
+}
+
+func (jm JSONMetric) GetMetricaValue() *float64 {
+	return jm.Value
+}
+
+func (jm JSONMetric) GetMetricaCounter() *int64 {
+	return jm.Delta
+}
+
+// slice of metrics with mutex
 type JSONMetrics struct {
 	Data []JSONMetric
 	mu   sync.Mutex

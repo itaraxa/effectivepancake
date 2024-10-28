@@ -30,6 +30,7 @@ type MetricPrinter interface {
 }
 
 // Интерфейс для описания взаимодействия с запросом на обновление метрики
+// TO-DO: move from Qury to Metrica
 type Querier interface {
 	GetMetricaType() string
 	SetMetricaType(string) error
@@ -40,11 +41,16 @@ type Querier interface {
 	String() string
 }
 
-type JSONQuerier interface {
+type StringMetricaQuerier interface {
+	SetMetricaRawValue(string) error
+	String() string
+}
+
+type JSONMetricaQuerier interface {
 	GetMetricaType() string
 	GetMetricaName() string
-	GetMetricaValue() interface{}
-	String() string
+	GetMetricaValue() *float64
+	GetMetricaCounter() *int64
 }
 
 /*
@@ -118,15 +124,15 @@ func UpdateMetrica(q Querier, s MetricUpdater) error {
 	return nil
 }
 
-func JSONUpdateMetrica(jq JSONQuerier, s MetricUpdater) error {
-	switch jq.GetMetricaType() {
+func JSONUpdateMetrica(jmq JSONMetricaQuerier, s MetricUpdater) error {
+	switch jmq.GetMetricaType() {
 	case "gauge":
-		err := s.UpdateGauge(jq.GetMetricaName(), jq.GetMetricaValue().(float64))
+		err := s.UpdateGauge(jmq.GetMetricaName(), *jmq.GetMetricaValue())
 		if err != nil {
 			return errors.ErrUpdateGauge
 		}
 	case "counter":
-		err := s.AddCounter(jq.GetMetricaName(), jq.GetMetricaValue().(int64))
+		err := s.AddCounter(jmq.GetMetricaName(), *jmq.GetMetricaCounter())
 		if err != nil {
 			return errors.ErrAddCounter
 		}
