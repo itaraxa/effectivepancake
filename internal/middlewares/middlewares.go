@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -150,34 +151,42 @@ func (w gzipWriter) Write(b []byte) (int, error) {
 func CompressResponceMiddleware(l logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+				l.Info("Responce will not compressed")
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// if r.Header.Get("Content-Type") != "text/html" && r.Header.Get("Content-Type") != "application/json" {
 			// 	l.Debug("Responce will not compressed")
 			// 	next.ServeHTTP(w, r)
 			// 	return
 			// }
 
-			if r.Header.Get("Content-Type") != "text/html" && r.Header.Get("Content-Type") != "application/json" {
-				l.Debug("Responce will not compressed")
-				next.ServeHTTP(w, r)
-				return
-			}
-
 			// compressing responce
 			gzw, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
 			if err != nil {
 				_, _ = w.Write([]byte(err.Error()))
-				// io.WriteString(w, err.Error())
 				l.Error("cannot compress responce", "error", err.Error())
 				return
 			}
 			defer gzw.Close()
 
 			w.Header().Set("Content-Encoding", "gzip")
+			// w.WriteHeader(http.StatusOK)
 			next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gzw}, r)
 		})
 	}
 }
 
+/*
+DecompressRequestMiddleware decompress gziped request body and returned uncompressed data.
+If request body is emty - nothing do
+
+Args:
+
+	l logger: object, implemented logger interface
+*/
 func DecompressRequestMiddleware(l logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -187,15 +196,19 @@ func DecompressRequestMiddleware(l logger) func(next http.Handler) http.Handler 
 				return
 			}
 
-			// decompress request
-			gzr, err := gzip.NewReader(r.Body)
-			if err != nil {
-				// TO-DO: добавить обработку ошибки - изменение статус кода ответа
-				l.Error("cannot decompress request", "error", err.Error())
-				return
+			// Check for GET-requests with empty body
+			if r.Body != nil {
+				// decompress request
+				gzr, err := gzip.NewReader(r.Body)
+				if err != nil {
+					// TO-DO: добавить обработку ошибки - изменение статус кода ответа
+					l.Error("cannot decompress request", "error", err.Error())
+					return
+				}
+				defer gzr.Close()
+				r.Body = io.NopCloser(gzr)
 			}
-			defer gzr.Close()
-			r.Body = io.NopCloser(gzr)
+
 			next.ServeHTTP(w, r)
 		})
 	}
