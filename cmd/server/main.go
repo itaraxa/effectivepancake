@@ -76,6 +76,7 @@ func (sa *ServerApp) Run() {
 
 	// Add middleware
 	sa.router.Use(middlewares.LoggerMiddleware(sa.logger))
+	// sa.router.Use(middleware.Compress(5, "application/json"))
 	sa.router.Use(middlewares.CompressResponceMiddleware(sa.logger))
 	sa.router.Use(middlewares.DecompressRequestMiddleware(sa.logger))
 	// sa.router.Use(middlewares.StatMiddleware(sa.logger, 10))

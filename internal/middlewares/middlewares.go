@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 )
@@ -151,11 +150,11 @@ func (w gzipWriter) Write(b []byte) (int, error) {
 func CompressResponceMiddleware(l logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-				l.Debug("Responce will not compressed")
-				next.ServeHTTP(w, r)
-				return
-			}
+			// if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			// 	l.Debug("Responce will not compressed")
+			// 	next.ServeHTTP(w, r)
+			// 	return
+			// }
 
 			if r.Header.Get("Content-Type") != "text/html" && r.Header.Get("Content-Type") != "application/json" {
 				l.Debug("Responce will not compressed")
@@ -166,7 +165,8 @@ func CompressResponceMiddleware(l logger) func(next http.Handler) http.Handler {
 			// compressing responce
 			gzw, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
 			if err != nil {
-				io.WriteString(w, err.Error())
+				_, _ = w.Write([]byte(err.Error()))
+				// io.WriteString(w, err.Error())
 				l.Error("cannot compress responce", "error", err.Error())
 				return
 			}
