@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -14,6 +15,7 @@ import (
 	"github.com/itaraxa/effectivepancake/internal/logger"
 	"github.com/itaraxa/effectivepancake/internal/middlewares"
 	"github.com/itaraxa/effectivepancake/internal/repositories/memstorage"
+	"github.com/itaraxa/effectivepancake/internal/services"
 	"github.com/itaraxa/effectivepancake/internal/version"
 )
 
@@ -62,6 +64,9 @@ func (sa *ServerApp) Run() {
 	sa.logger.Info("Server started",
 		"Listen", sa.config.Endpoint,
 		"Log level", sa.config.LogLevel,
+		"Restore", sa.config.Restore,
+		"Storing metrica file", sa.config.FileStoragePath,
+		"Store interval", time.Duration(sa.config.StoreInterval)*time.Second,
 	)
 	defer sa.logger.Info("Server stoped")
 
@@ -74,12 +79,42 @@ func (sa *ServerApp) Run() {
 		os.Exit(0)
 	}()
 
+	// Restore from file
+
+	// Writing to file periodically
+	if sa.config.StoreInterval > 0 {
+		go func() {
+			ticker := time.NewTicker(time.Second * time.Duration(sa.config.StoreInterval))
+			for {
+				<-ticker.C
+				file, err := os.OpenFile(sa.config.FileStoragePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
+				if err != nil {
+					sa.logger.Error("cannot open file for writing", "error", err.Error())
+					return
+				}
+				services.SaveMetrics(sa.storage, file)
+				sa.logger.Info("file saved", "filename", sa.config.FileStoragePath)
+				file.Close()
+			}
+		}()
+	}
+
 	// Add middleware
 	sa.router.Use(middlewares.LoggerMiddleware(sa.logger))
 	// sa.router.Use(middleware.Compress(5, "application/json"))
 	sa.router.Use(middlewares.CompressResponceMiddleware(sa.logger))
 	sa.router.Use(middlewares.DecompressRequestMiddleware(sa.logger))
 	// sa.router.Use(middlewares.StatMiddleware(sa.logger, 10))
+	if sa.config.StoreInterval == 0 {
+		sa.logger.Info("using synchronous file writing")
+		file, err := os.OpenFile(sa.config.FileStoragePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
+		if err != nil {
+			sa.logger.Error("cannot open file for writing", "error", err.Error())
+			return
+		}
+		defer file.Close()
+		sa.router.Use(middlewares.SaveStorageToFile(sa.logger, sa.storage, file))
+	}
 
 	// Add routes
 	sa.router.Get(`/`, handlers.GetAllCurrentMetrics(sa.storage, sa.logger))

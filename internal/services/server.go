@@ -1,6 +1,8 @@
 package services
 
 import (
+	"encoding/json"
+	"io"
 	"strconv"
 	"strings"
 
@@ -22,6 +24,7 @@ type MetricUpdater interface {
 
 type MetricGetter interface {
 	GetMetrica(metricaType string, metricaName string) (interface{}, error)
+	GetAllMetrics() interface{}
 }
 
 type MetricPrinter interface {
@@ -124,20 +127,32 @@ func UpdateMetrica(q Querier, s MetricUpdater) error {
 	return nil
 }
 
-func JSONUpdateMetrica(jmq JSONMetricaQuerier, s MetricUpdater) error {
+func JSONUpdateMetrica(jmq JSONMetricaQuerier, mu MetricUpdater) error {
 	switch jmq.GetMetricaType() {
 	case "gauge":
-		err := s.UpdateGauge(jmq.GetMetricaName(), *jmq.GetMetricaValue())
+		err := mu.UpdateGauge(jmq.GetMetricaName(), *jmq.GetMetricaValue())
 		if err != nil {
 			return errors.ErrUpdateGauge
 		}
 	case "counter":
-		err := s.AddCounter(jmq.GetMetricaName(), *jmq.GetMetricaCounter())
+		err := mu.AddCounter(jmq.GetMetricaName(), *jmq.GetMetricaCounter())
 		if err != nil {
 			return errors.ErrAddCounter
 		}
 	default:
 		return errors.ErrBadType
+	}
+	return nil
+}
+
+func SaveMetrics(mg MetricGetter, dst io.Writer) error {
+	data, err := json.MarshalIndent(mg.GetAllMetrics(), "\t", "\t")
+	if err != nil {
+		return err
+	}
+	_, err = dst.Write(data)
+	if err != nil {
+		return err
 	}
 	return nil
 }

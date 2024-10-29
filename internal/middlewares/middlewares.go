@@ -8,12 +8,19 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/itaraxa/effectivepancake/internal/services"
 )
 
 type logger interface {
 	Debug(msg string, fields ...interface{})
 	Info(msg string, fields ...interface{})
 	Error(msg string, fields ...interface{})
+}
+
+type storager interface {
+	GetMetrica(metricaType string, metricaName string) (interface{}, error)
+	GetAllMetrics() interface{}
 }
 
 /*
@@ -210,6 +217,26 @@ func DecompressRequestMiddleware(l logger) func(next http.Handler) http.Handler 
 			}
 
 			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+/*
+SaveStorageToFile middleware save all storager data into dst
+*/
+func SaveStorageToFile(l logger, s storager, dst io.WriteCloser) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			wrappedWriter := &responseWriterWrapper{ResponseWriter: w, statusCode: http.StatusOK}
+			next.ServeHTTP(wrappedWriter, r)
+			if wrappedWriter.statusCode == http.StatusOK {
+				err := services.SaveMetrics(s, dst)
+				if err != nil {
+					l.Error("error writing to file", "error", err.Error())
+					return
+				}
+				l.Debug("data writed")
+			}
 		})
 	}
 }

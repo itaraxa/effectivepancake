@@ -93,6 +93,19 @@ func (m *MemStorage) GetMetrica(metricaType string, metricaName string) (interfa
 }
 
 /*
+GetAllMetrica return copy of data in memory storage
+*/
+func (m *MemStorage) GetAllMetrics() interface{} {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return struct {
+		Gauges   map[string]float64 `json:"gauges"`
+		Counters map[string]int64   `json:"counters"`
+	}{m.Gauge, m.Counter}
+}
+
+/*
 Get string representation of the current state the MemStorage.
 
 Returns:

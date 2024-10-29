@@ -1,4 +1,4 @@
 package version
 
-const AgentVersion = `1.8.0`
-const ServerVersion = `1.8.0`
+const AgentVersion = `1.9.0`
+const ServerVersion = `1.9.0`
