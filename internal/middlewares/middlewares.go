@@ -18,7 +18,7 @@ type logger interface {
 	Error(msg string, fields ...interface{})
 }
 
-type storager interface {
+type metricGetter interface {
 	GetMetrica(metricaType string, metricaName string) (interface{}, error)
 	GetAllMetrics() interface{}
 }
@@ -146,15 +146,32 @@ func StatMiddleware(l logger, logInterval int) func(next http.Handler) http.Hand
 	}
 }
 
+/*
+Helper structure for the compress middleware function
+*/
 type gzipWriter struct {
 	http.ResponseWriter
 	Writer io.Writer
 }
 
+/*
+Substituting the built-in writer method with the compress implementation
+*/
 func (w gzipWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
 }
 
+/*
+CompressResponceMiddleware сompresses the response body to the client if it supports receiving compressed content
+
+Args:
+
+	l logger: a logger used for printing messages
+
+Returns:
+
+	func(next http.Handler) http.Handler
+*/
 func CompressResponceMiddleware(l logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -163,12 +180,6 @@ func CompressResponceMiddleware(l logger) func(next http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-
-			// if r.Header.Get("Content-Type") != "text/html" && r.Header.Get("Content-Type") != "application/json" {
-			// 	l.Debug("Responce will not compressed")
-			// 	next.ServeHTTP(w, r)
-			// 	return
-			// }
 
 			// compressing responce
 			gzw, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
@@ -180,14 +191,13 @@ func CompressResponceMiddleware(l logger) func(next http.Handler) http.Handler {
 			defer gzw.Close()
 
 			w.Header().Set("Content-Encoding", "gzip")
-			// w.WriteHeader(http.StatusOK)
 			next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gzw}, r)
 		})
 	}
 }
 
 /*
-DecompressRequestMiddleware decompress gziped request body and returned uncompressed data.
+DecompressRequestMiddleware decompresses gziped request body and returned uncompressed data.
 If request body is emty - nothing do
 
 Args:
@@ -222,9 +232,20 @@ func DecompressRequestMiddleware(l logger) func(next http.Handler) http.Handler 
 }
 
 /*
-SaveStorageToFile middleware save all storager data into dst
+SaveStorageToFile middleware saves all metric data to the io.WriterCloser after each successfully rocessed request.
+This is used for synchronous saving of metric data
+
+Args:
+
+	l logger: a logger used for printing messages
+	s storager: a storager that allows getting metric data
+	dst io.WriteCloser: a WriteCloser object for writing metric data
+
+Returns:
+
+	func(next http.Handler) http.Handler
 */
-func SaveStorageToFile(l logger, s storager, dst io.WriteCloser) func(next http.Handler) http.Handler {
+func SaveStorageToFile(l logger, s metricGetter, dst io.WriteCloser) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			wrappedWriter := &responseWriterWrapper{ResponseWriter: w, statusCode: http.StatusOK}

@@ -18,36 +18,37 @@ type logger interface {
 	Info(msg string, fields ...interface{})
 }
 
-type metricaStorager interface {
-	metricaGetter
-	metricaUpdater
+type metricStorager interface {
+	metricGetter
+	metricUpdater
 }
 
-type metricaGetter interface {
+type metricGetter interface {
 	GetMetrica(string, string) (interface{}, error)
 }
 
-type metricaUpdater interface {
+type metricUpdater interface {
 	UpdateGauge(metricName string, value float64) error
 	AddCounter(metricName string, value int64) error
 }
 
-type metricaPrinter interface {
+type metricPrinter interface {
 	HTML() string
 }
 
 /*
-Wrapper function for handler, what return all metrica values in HTML view
+GetAllCurrentMetrics creates handler that return all metrica values in HTML view
 
 Args:
 
-	s services.Storager: An object implementing the service.Storager interface
+	s metricPrinter: An object implementing the service.Storager interface
+	l logger: a logger for printing messages
 
 Returns:
 
 	http.HandlerFunc
 */
-func GetAllCurrentMetrics(s metricaPrinter, l logger) http.HandlerFunc {
+func GetAllCurrentMetrics(s metricPrinter, l logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodGet {
 			http.Error(w, "uncorrect request type != GET", http.StatusMethodNotAllowed)
@@ -65,17 +66,18 @@ func GetAllCurrentMetrics(s metricaPrinter, l logger) http.HandlerFunc {
 }
 
 /*
-Wrapper function for handler, which return metrica value
+GetMetrica creates a handler that returns the metric value
 
 Args:
 
-	s services.Storager: An object implementing the service.Storager interface
+	s metricGetter: An object implementing the service.Storager interface
+	l logger: a logger for printing messages
 
 Returns:
 
 	http.HandlerFunc
 */
-func GetMetrica(s metricaGetter, l logger) http.HandlerFunc {
+func GetMetrica(s metricGetter, l logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		l.Info("received a request to get metrica", "type", chi.URLParam(req, "type"), "name", chi.URLParam(req, "name"))
@@ -99,18 +101,18 @@ func GetMetrica(s metricaGetter, l logger) http.HandlerFunc {
 }
 
 /*
-JSONGetMetrica wrapper function for handler, which return metrica value
+JSONGetMetrica creates a handler that return metrica value in JSON
 
 Args:
 
-	s services.Storager: An object implementing the service.Storager interface
-	l logger.Logger: logger for embedding into handler func
+	s metricGetter: a storage that allows getting metric
+	l logger: a logger for printing messages
 
 Returns:
 
 	http.HandlerFunc
 */
-func JSONGetMetrica(s metricaGetter, l logger) http.HandlerFunc {
+func JSONGetMetrica(s metricGetter, l logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		// Checks
 		if req.Method != http.MethodPost {
@@ -175,17 +177,18 @@ func JSONGetMetrica(s metricaGetter, l logger) http.HandlerFunc {
 }
 
 /*
-Wrapper function for handler: writing the metric value to the storage
+UpdateHandler creates handler that writes the metric value to the storage
 
 Args:
 
-	s services.Storager: An object implementing the service.Storager interface
+	l logger: a logger for printing messages
+	s metricUpdater: a storage that allows update metric data
 
 Returns:
 
 	http.HandlerFunc
 */
-func UpdateHandler(l logger, s metricaUpdater) http.HandlerFunc {
+func UpdateHandler(l logger, s metricUpdater) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		// Checks
 		if req.Method != http.MethodPost {
@@ -232,7 +235,19 @@ func UpdateHandler(l logger, s metricaUpdater) http.HandlerFunc {
 	}
 }
 
-func JSONUpdateHandler(l logger, s metricaStorager) http.HandlerFunc {
+/*
+JSONUpdateHandler creates handler that updates metric values received in JSON format to the storage
+
+Args:
+
+	l logger: a logger for printing messages
+	s metricUpdater: a storage that allows update metric data
+
+Returns:
+
+	http.HandlerFunc
+*/
+func JSONUpdateHandler(l logger, s metricStorager) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		// Checks
 		if req.Method != http.MethodPost {

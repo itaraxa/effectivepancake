@@ -16,31 +16,6 @@ import (
 	"github.com/itaraxa/effectivepancake/internal/models"
 )
 
-// Интерфейс для работы с метриками на агенте
-type MetricsAddGetter interface {
-	MetricsAdderr
-	MetricsGetter
-}
-
-type MetricsAdderr interface {
-	AddData(data []models.JSONMetric) error
-	AddPollCount(pollCount int64) error
-}
-
-type MetricsGetter interface {
-	GetData() []models.JSONMetric
-}
-
-type MetricStringer interface {
-	String() string
-}
-
-type logger interface {
-	Error(msg string, fields ...interface{})
-	Info(msg string, fields ...interface{})
-	Debug(msg string, fields ...interface{})
-}
-
 /*
 sendMetricsToServerQueryStr send metrica data to server via http. Data included into request string
 

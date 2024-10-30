@@ -13,52 +13,6 @@ import (
 	"github.com/itaraxa/effectivepancake/internal/models"
 )
 
-// Интерфейсы для описания взаимодействия с хранилищем метрик
-type MetricStorager interface {
-	MetricGetter
-	MetricUpdater
-	MetricPrinter
-}
-
-type MetricUpdater interface {
-	UpdateGauge(metricName string, value float64) error
-	AddCounter(metricName string, value int64) error
-}
-
-type MetricGetter interface {
-	GetMetrica(metricaType string, metricaName string) (interface{}, error)
-	GetAllMetrics() interface{}
-}
-
-type MetricPrinter interface {
-	String() string
-	HTML() string
-}
-
-// Интерфейс для описания взаимодействия с запросом на обновление метрики
-// TO-DO: move from Qury to Metrica
-type Querier interface {
-	GetMetricaType() string
-	SetMetricaType(string) error
-	GetMetricName() string
-	SetMetricaName(string) error
-	GetMetricaRawValue() string
-	SetMetricaRawValue(string) error
-	String() string
-}
-
-type StringMetricaQuerier interface {
-	SetMetricaRawValue(string) error
-	String() string
-}
-
-type JSONMetricaQuerier interface {
-	GetMetricaType() string
-	GetMetricaName() string
-	GetMetricaValue() *float64
-	GetMetricaCounter() *int64
-}
-
 /*
 Creating new instance of models.Query from request.URL string
 
@@ -130,6 +84,18 @@ func UpdateMetrica(q Querier, s MetricUpdater) error {
 	return nil
 }
 
+/*
+JSONUpdateMetrica updates the metric value received from the request in the storage
+
+Args:
+
+	jmq JSONMetricaQuerier: a request that allows getting the gauge value or counter delta
+	mu MetricUpdater: a storage that allows saving a metric
+
+Returns:
+
+	error: nil or error, if occured
+*/
 func JSONUpdateMetrica(jmq JSONMetricaQuerier, mu MetricUpdater) error {
 	switch jmq.GetMetricaType() {
 	case "gauge":
@@ -148,7 +114,19 @@ func JSONUpdateMetrica(jmq JSONMetricaQuerier, mu MetricUpdater) error {
 	return nil
 }
 
-func SaveMetrics(mg MetricGetter, dst io.Writer) error {
+/*
+WriteMetrics saves metrics from storage to the any writer
+
+Args:
+
+	mg MetricGetter: a storage that allows getting metrics
+	dst io.Writer: an object that allows data to be written to it
+
+Returns:
+
+	error: nil or error, if occured
+*/
+func WriteMetrics(mg MetricGetter, dst io.Writer) error {
 	data, err := json.MarshalIndent(mg.GetAllMetrics(), "\t", "\t")
 	if err != nil {
 		return err
@@ -160,6 +138,18 @@ func SaveMetrics(mg MetricGetter, dst io.Writer) error {
 	return nil
 }
 
+/*
+WriteMetrics saves metrics from storage and current timestamp to the any writer
+
+Args:
+
+	mg MetricGetter: a storage that allows getting metrics
+	dst io.Writer: an object that allows data to be written to it
+
+Returns:
+
+	error: nil or error, if occured
+*/
 func WriteMetricsWithTimestamp(mg MetricGetter, dst io.Writer) error {
 	blob := make(map[string]interface{})
 	blob["timestamp"] = time.Now()
@@ -176,6 +166,20 @@ func WriteMetricsWithTimestamp(mg MetricGetter, dst io.Writer) error {
 	return nil
 }
 
+/*
+SaveMetricsToFile saves metrics from storage to the file.
+THis is warapper over WriteMetricsWithTimestamp(mg MetricGetter, dst io.Writer) function
+
+Args:
+
+	l logger: a logger used for printing messages
+	mg MetricGetter: a storage that allows getting metrics
+	fileName string: the file name for saving metric data
+
+Returns:
+
+	error: nil or error, if occured
+*/
 func SaveMetricsToFile(l logger, mg MetricGetter, fileName string) error {
 	file, err := os.OpenFile(fileName, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
 	if err != nil {
@@ -192,6 +196,19 @@ func SaveMetricsToFile(l logger, mg MetricGetter, fileName string) error {
 	return nil
 }
 
+/*
+LoadMetrics loads metric data from any reader
+
+Args:
+
+	mu MetricUpdater: a storage that allows updating metric data
+	src io.Reader: an object that allow reading data
+
+Returns:
+
+	time.Time: timestamp of when the metric data was written to the reader
+	error: nil or error, if occured
+*/
 func LoadMetrics(mu MetricUpdater, src io.Reader) (time.Time, error) {
 	data := make(map[string]interface{})
 	decoder := json.NewDecoder(src)
@@ -213,20 +230,40 @@ func LoadMetrics(mu MetricUpdater, src io.Reader) (time.Time, error) {
 
 	if gauges, ok := metrics.(map[string]interface{})["gauges"]; ok {
 		for ID, value := range gauges.(map[string]interface{}) {
-			mu.UpdateGauge(ID, value.(float64))
+			err := mu.UpdateGauge(ID, value.(float64))
+			if err != nil {
+				return time.UnixMilli(0), fmt.Errorf("updating gauge %s error: %v", ID, err.Error())
+			}
 		}
 	}
 	if counter, ok := metrics.(map[string]interface{})["counters"]; ok {
 		for ID, delta := range counter.(map[string]interface{}) {
 			// Unmarshall from interface{} to float64 and convert to int64
 			// because json.Unmarshall numbers into float64
-			mu.AddCounter(ID, int64(delta.(float64)))
+			err := mu.AddCounter(ID, int64(delta.(float64)))
+			if err != nil {
+				return time.UnixMilli(0), fmt.Errorf("updating counter %s error: %v", ID, err.Error())
+			}
 		}
 	}
 
 	return timeStamp, nil
 }
 
+/*
+LoadMetricsFromFile loades metric data from the file.
+This is wrapper over LoadMetrics(mu MetricUpdater, src io.Reader) (time.Time, error) function
+
+Args:
+
+	l logger: a logger used for printing messages
+	mu MetricUpdater: a storage that allows updating metric data
+	fileName string: the file name for reading metric data
+
+Returns:
+
+	error: nil or error, if occured
+*/
 func LoadMetricsFromFile(l logger, mu MetricUpdater, fileName string) error {
 	file, err := os.OpenFile(fileName, os.O_RDONLY, 0666)
 	if err != nil {

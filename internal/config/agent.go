@@ -17,7 +17,7 @@ type AgentConfig struct {
 	LogLevel       string
 	ShowVersion    bool
 	ReportMode     string // json or raw
-	Compress       string
+	Compress       string // gzip or none
 }
 
 func NewAgentConfig() *AgentConfig {
@@ -92,7 +92,7 @@ func (ac *AgentConfig) ParseEnv() error {
 		case `ERROR`:
 			ac.LogLevel = `ERROR`
 		default:
-			fmt.Println(`An unknown log level was set via an environment variable. Using INFO`)
+			fmt.Fprintln(os.Stderr, `An unknown log level was set via an environment variable. Using INFO`)
 			ac.LogLevel = `INFO`
 		}
 	}
@@ -110,7 +110,7 @@ func (ac *AgentConfig) ParseEnv() error {
 		case `none`:
 			ac.Compress = `none`
 		default:
-			fmt.Println(`An unknown compress method was set via an environment variable. Using gzip`)
+			fmt.Fprintln(os.Stderr, `An unknown compress method was set via an environment variable. Using gzip`)
 			ac.Compress = `gzip`
 		}
 	}
