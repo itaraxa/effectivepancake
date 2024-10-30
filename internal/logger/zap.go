@@ -73,7 +73,7 @@ func (zl *ZapLogger) Error(msg string, fields ...interface{}) {
 }
 
 func (zl *ZapLogger) Sync() {
-	zl.logger.Sync()
+	_ = zl.logger.Sync()
 }
 
 // Вспомогательная функция для преобразования полей в zap.Field
