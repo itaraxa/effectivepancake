@@ -219,7 +219,7 @@ func LoadMetrics(mu MetricUpdater, src io.Reader) (time.Time, error) {
 	if !ok {
 		return time.UnixMilli(0), fmt.Errorf("data doesn't contain timestamp field")
 	}
-	timeStamp, err := time.Parse("2006-01-02T15:04:05.999999999-07:00", timeStampStr)
+	timeStamp, err := time.Parse("2006-01-02T15:04:05.999999999Z07:00", timeStampStr)
 	if err != nil {
 		return time.UnixMilli(0), fmt.Errorf("cann't parse timestamp: %v", err.Error())
 	}
