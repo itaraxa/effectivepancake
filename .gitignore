@@ -30,3 +30,5 @@ test/metricstest-darwin-arm64
 test/*.sh
 metrictest
 
+metrics.dat
+temp*
