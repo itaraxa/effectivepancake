@@ -230,7 +230,7 @@ func SaveStorageToFile(l logger, s storager, dst io.WriteCloser) func(next http.
 			wrappedWriter := &responseWriterWrapper{ResponseWriter: w, statusCode: http.StatusOK}
 			next.ServeHTTP(wrappedWriter, r)
 			if wrappedWriter.statusCode == http.StatusOK {
-				err := services.SaveMetrics(s, dst)
+				err := services.WriteMetricsWithTimestamp(s, dst)
 				if err != nil {
 					l.Error("error writing to file", "error", err.Error())
 					return
