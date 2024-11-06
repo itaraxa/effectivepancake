@@ -200,26 +200,26 @@ func (pr *PostgresRepository) GetMetrica(ctx context.Context, metricaType string
 	switch metricaType {
 	case `gauge`:
 		row := pr.db.QueryRowContext(ctx, "SELCET value FROM gauges WHERE id = $1 AND timestamp = (SELECT MAX(timestamp FROM gauges));", metricaName)
-		var gauge *float64
-		err := row.Scan(gauge)
+		var gauge sql.NullFloat64
+		err := row.Scan(&gauge)
 		if err != nil {
 			return nil, fmt.Errorf("cannot get gauge value from db: %w", err)
 		}
-		if gauge == nil {
+		if !gauge.Valid {
 			return nil, fmt.Errorf("empty gauge value in db")
 		}
-		return *gauge, nil
+		return gauge.Float64, nil
 	case `counter`:
 		row := pr.db.QueryRowContext(ctx, "SELCET value FROM counters WHERE id = $1 AND timestamp = (SELECT MAX(timestamp FROM counters));", metricaName)
-		var delta *int64
+		var delta sql.NullInt64
 		err := row.Scan(delta)
 		if err != nil {
 			return nil, fmt.Errorf("cannot get counter value from db: %w", err)
 		}
-		if delta == nil {
+		if !delta.Valid {
 			return nil, fmt.Errorf("empty counter value in db")
 		}
-		return *delta, nil
+		return delta.Int64, nil
 	default:
 		return nil, fmt.Errorf("unknown metrica type: %s", metricaType)
 	}

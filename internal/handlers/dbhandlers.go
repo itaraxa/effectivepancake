@@ -15,7 +15,7 @@ type storagChecker interface {
 	PingContext(context.Context) error
 }
 
-func PingDb(l logger, s storagChecker) http.HandlerFunc {
+func PingDB(l logger, s storagChecker) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodGet {
 			http.Error(w, "wrong request type != GET", http.StatusMethodNotAllowed)
