@@ -2,6 +2,7 @@ package middlewares
 
 import (
 	"compress/gzip"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,8 +20,8 @@ type logger interface {
 }
 
 type metricGetter interface {
-	GetMetrica(metricaType string, metricaName string) (interface{}, error)
-	GetAllMetrics() interface{}
+	GetMetrica(ctx context.Context, metricaType string, metricaName string) (interface{}, error)
+	GetAllMetrics(ctx context.Context) interface{}
 }
 
 /*

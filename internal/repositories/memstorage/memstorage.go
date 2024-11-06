@@ -1,6 +1,7 @@
 package memstorage
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -26,7 +27,7 @@ Returns:
 
 	error: nil or error of adding counter to the MemStorgage
 */
-func (m *MemStorage) UpdateGauge(metricName string, value float64) error {
+func (m *MemStorage) UpdateGauge(ctx context.Context, metricName string, value float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -47,7 +48,7 @@ Returns:
 
 	error: nil or error of adding counter to the MemStorgage
 */
-func (m *MemStorage) AddCounter(metricName string, value int64) error {
+func (m *MemStorage) AddCounter(ctx context.Context, metricName string, value int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -69,7 +70,7 @@ Returns:
 	string: value of metrica in the string representation
 	error: nil or error if metrica was not found in the MemStorage
 */
-func (m *MemStorage) GetMetrica(metricaType string, metricaName string) (interface{}, error) {
+func (m *MemStorage) GetMetrica(ctx context.Context, metricaType string, metricaName string) (interface{}, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -95,7 +96,7 @@ func (m *MemStorage) GetMetrica(metricaType string, metricaName string) (interfa
 /*
 GetAllMetrica return copy of data in memory storage
 */
-func (m *MemStorage) GetAllMetrics() interface{} {
+func (m *MemStorage) GetAllMetrics(ctx context.Context) interface{} {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -123,7 +124,7 @@ Output example:
 	Counter1: 1
 	Counter2: 42
 */
-func (m *MemStorage) String() string {
+func (m *MemStorage) String(ctx context.Context) string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -146,7 +147,7 @@ Returns:
 
 	string: html representation of the current state the MemStorage
 */
-func (m *MemStorage) HTML() string {
+func (m *MemStorage) HTML(ctx context.Context) string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -223,4 +224,8 @@ func NewMemStorage() *MemStorage {
 		Gauge:   make(map[string]float64),
 		Counter: make(map[string]int64),
 	}
+}
+
+func (m *MemStorage) PingContext(ctx context.Context) error {
+	return nil
 }

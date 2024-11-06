@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,16 +25,16 @@ type metricStorager interface {
 }
 
 type metricGetter interface {
-	GetMetrica(string, string) (interface{}, error)
+	GetMetrica(context.Context, string, string) (interface{}, error)
 }
 
 type metricUpdater interface {
-	UpdateGauge(metricName string, value float64) error
-	AddCounter(metricName string, value int64) error
+	UpdateGauge(ctx context.Context, metricName string, value float64) error
+	AddCounter(ctx context.Context, metricName string, value int64) error
 }
 
 type metricPrinter interface {
-	HTML() string
+	HTML(ctx context.Context) string
 }
 
 /*
@@ -58,7 +59,7 @@ func GetAllCurrentMetrics(s metricPrinter, l logger) http.HandlerFunc {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
 
-		_, err := w.Write([]byte(s.HTML()))
+		_, err := w.Write([]byte(s.HTML(context.TODO())))
 		if err != nil {
 			l.Error("cannot write HTML to response body")
 		}
@@ -81,7 +82,7 @@ func GetMetrica(s metricGetter, l logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		l.Info("received a request to get metrica", "type", chi.URLParam(req, "type"), "name", chi.URLParam(req, "name"))
-		v, err := s.GetMetrica(chi.URLParam(req, "type"), chi.URLParam(req, "name"))
+		v, err := s.GetMetrica(context.TODO(), chi.URLParam(req, "type"), chi.URLParam(req, "name"))
 		if err != nil {
 			w.WriteHeader(http.StatusNotFound)
 			l.Error("cannot get metrica", "type", chi.URLParam(req, "type"), "name", chi.URLParam(req, "name"), "error", err.Error())
@@ -136,7 +137,7 @@ func JSONGetMetrica(s metricGetter, l logger) http.HandlerFunc {
 			return
 		}
 		l.Info("received a request to get metrica in JSON", "type", jm.GetMetricaType(), "name", jm.GetMetricaName())
-		valueFromStorage, err := s.GetMetrica(jm.GetMetricaType(), jm.GetMetricaName())
+		valueFromStorage, err := s.GetMetrica(context.TODO(), jm.GetMetricaType(), jm.GetMetricaName())
 		if err != nil && errors.Is(err, myErrors.ErrMetricaNotFaund) {
 			w.WriteHeader(http.StatusNotFound)
 			l.Error("cannot get metrica", "type", jm.GetMetricaType(), "name", jm.GetMetricaName(), "error", err.Error())
@@ -311,7 +312,7 @@ func JSONUpdateHandler(l logger, s metricStorager) http.HandlerFunc {
 		}
 
 		// Response
-		value, err := s.GetMetrica(jm.GetMetricaType(), jm.GetMetricaName())
+		value, err := s.GetMetrica(context.TODO(), jm.GetMetricaType(), jm.GetMetricaName())
 		if err != nil {
 			http.Error(w, "get metrica from storage error", http.StatusInternalServerError)
 			l.Error("get metrica from storage error", "json query", jm.String(), "error", err.Error())

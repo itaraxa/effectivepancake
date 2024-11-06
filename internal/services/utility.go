@@ -3,6 +3,7 @@ package services
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"fmt"
 )
 
@@ -11,7 +12,7 @@ func ShowQuery(q Querier) {
 }
 
 func ShowStorage(s MetricPrinter) {
-	fmt.Println(s.String())
+	fmt.Println(s.String(context.TODO()))
 }
 
 /*

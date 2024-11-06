@@ -1,27 +1,32 @@
 package services
 
-import "github.com/itaraxa/effectivepancake/internal/models"
+import (
+	"context"
+
+	"github.com/itaraxa/effectivepancake/internal/models"
+)
 
 // Server sides interfaces
 type MetricStorager interface {
 	MetricGetter
 	MetricUpdater
 	MetricPrinter
+	PingContext(context.Context) error
 }
 
 type MetricUpdater interface {
-	UpdateGauge(metricName string, value float64) error
-	AddCounter(metricName string, value int64) error
+	UpdateGauge(ctx context.Context, metricName string, value float64) error
+	AddCounter(ctx context.Context, metricName string, value int64) error
 }
 
 type MetricGetter interface {
-	GetMetrica(metricaType string, metricaName string) (interface{}, error)
-	GetAllMetrics() interface{}
+	GetMetrica(ctx context.Context, metricaType string, metricaName string) (interface{}, error)
+	GetAllMetrics(ctx context.Context) interface{}
 }
 
 type MetricPrinter interface {
-	String() string
-	HTML() string
+	String(ctx context.Context) string
+	HTML(ctx context.Context) string
 }
 
 // Интерфейс для описания взаимодействия с запросом на обновление метрики
