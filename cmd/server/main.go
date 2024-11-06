@@ -14,6 +14,7 @@ import (
 	"github.com/itaraxa/effectivepancake/internal/logger"
 	"github.com/itaraxa/effectivepancake/internal/middlewares"
 	"github.com/itaraxa/effectivepancake/internal/repositories/memstorage"
+	"github.com/itaraxa/effectivepancake/internal/repositories/postgres"
 	"github.com/itaraxa/effectivepancake/internal/services"
 	"github.com/itaraxa/effectivepancake/internal/version"
 )
@@ -127,9 +128,9 @@ func (sa *ServerApp) Run() {
 	}
 
 	// Add routes
-	// sa.router.Get(`/ping/`, handlers.PingDb(sa.logger, sa.storage))
-	sa.router.Get(`/ping`, handlers.Ping(sa.logger, sa.config.DatabaseDSN))
-	sa.router.Get(`/ping/`, handlers.Ping(sa.logger, sa.config.DatabaseDSN))
+	sa.router.Get(`/ping{slash:/*}`, handlers.PingDB(sa.logger, sa.storage))
+	// sa.router.Get(`/ping`, handlers.Ping(sa.logger, sa.config.DatabaseDSN))
+	// sa.router.Get(`/ping/`, handlers.Ping(sa.logger, sa.config.DatabaseDSN))
 	sa.router.Get(`/value/{type}/{name}`, handlers.GetMetrica(sa.storage, sa.logger))
 	sa.router.Post(`/value/`, handlers.JSONGetMetrica(sa.storage, sa.logger))
 	sa.router.Post(`/update/`, handlers.JSONUpdateHandler(sa.logger, sa.storage))
@@ -170,26 +171,18 @@ func main() {
 	defer logger.Sync()
 
 	r := chi.NewRouter()
-	s := memstorage.NewMemStorage()
-	app := NewServerApp(logger, s, r, serverConf)
-	app.Run()
 
-	// // var s services.MetricStorager
-	// if serverConf.DatabaseDSN != "" {
-	// 	s, err := postgres.NewPostgresRepository(serverConf.DatabaseDSN)
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// 	app := NewServerApp(logger, s, r, serverConf)
-	// 	app.Run()
-	// 	// s = s.(*postgres.PostgresRepository)
-	// } else {
-	// 	s := memstorage.NewMemStorage()
-	// 	app := NewServerApp(logger, s, r, serverConf)
-	// 	app.Run()
-	// 	// s = s.(*memstorage.MemStorage)
-	// }
-
-	// app := NewServerApp(logger, s, r, serverConf)
-	//app.Run()
+	// var s services.MetricStorager
+	if serverConf.DatabaseDSN != "" {
+		s, err := postgres.NewPostgresRepository(serverConf.DatabaseDSN)
+		if err != nil {
+			panic(err)
+		}
+		app := NewServerApp(logger, s, r, serverConf)
+		app.Run()
+	} else {
+		s := memstorage.NewMemStorage()
+		app := NewServerApp(logger, s, r, serverConf)
+		app.Run()
+	}
 }

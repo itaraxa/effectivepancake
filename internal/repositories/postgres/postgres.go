@@ -9,32 +9,27 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-type MetricStorager interface {
-	MetricGetter
-	MetricUpdater
-	MetricPrinter
+type metricStorager interface {
+	metricGetter
+	metricUpdater
+	metricPrinter
+	PingContext(context.Context) error
 }
 
-type MetricUpdater interface {
-	UpdateGauge(ctx context.Context, metricName string, value float64) error
-	AddCounter(ctx context.Context, metricName string, value int64) error
+type metricUpdater interface {
+	UpdateGauge(context.Context, string, float64) error
+	AddCounter(context.Context, string, int64) error
 }
 
-type MetricGetter interface {
+type metricGetter interface {
 	GetMetrica(ctx context.Context, metricaType string, metricaName string) (interface{}, error)
 	GetAllMetrics(ctx context.Context) (interface{}, error)
 }
 
-type MetricPrinter interface {
+type metricPrinter interface {
 	String() string
 	HTML() string
 }
-
-// type dbStorager interface {
-// 	PingContext(context.Context) error
-// 	Close() error
-// 	PrepareTablesContext(context.Context) error
-// }
 
 type PostgresRepository struct {
 	db *sql.DB
@@ -155,7 +150,7 @@ Returns:
 
 	error
 */
-func (pr *PostgresRepository) AddCounter(ctx context.Context, metricName string, delta int64) (err error) {
+func (pr *PostgresRepository) AddCounter(ctx context.Context, metricName string, delta int64) error {
 	// init transaction
 	tx, err := pr.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -196,6 +191,20 @@ func (pr *PostgresRepository) AddCounter(ctx context.Context, metricName string,
 	return nil
 }
 
+/*
+GetMetrica return value of requested metrica
+
+Args:
+
+	ctx context.Context
+	metricaType string: type of requested metrica
+	metricaName string: name of requested metrica
+
+Returns:
+
+	interface{}: value of requested metrica, float64 for gauge or int64 for counter
+	error: nil or error, if value cannot be getted
+*/
 func (pr *PostgresRepository) GetMetrica(ctx context.Context, metricaType string, metricaName string) (interface{}, error) {
 	switch metricaType {
 	case `gauge`:

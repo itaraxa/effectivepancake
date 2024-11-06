@@ -48,11 +48,11 @@ Returns:
 
 	error: nil or error of adding counter to the MemStorgage
 */
-func (m *MemStorage) AddCounter(ctx context.Context, metricName string, value int64) error {
+func (m *MemStorage) AddCounter(ctx context.Context, metricName string, delta int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.Counter[metricName] += value
+	m.Counter[metricName] += delta
 
 	return nil
 }

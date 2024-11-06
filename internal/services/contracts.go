@@ -15,13 +15,13 @@ type MetricStorager interface {
 }
 
 type MetricUpdater interface {
-	UpdateGauge(ctx context.Context, metricName string, value float64) error
-	AddCounter(ctx context.Context, metricName string, value int64) error
+	UpdateGauge(context.Context, string, float64) error
+	AddCounter(context.Context, string, int64) error
 }
 
 type MetricGetter interface {
-	GetMetrica(ctx context.Context, metricaType string, metricaName string) (interface{}, error)
-	GetAllMetrics(ctx context.Context) interface{}
+	GetMetrica(context.Context, string, string) (interface{}, error)
+	GetAllMetrics(context.Context) interface{}
 }
 
 type MetricPrinter interface {
