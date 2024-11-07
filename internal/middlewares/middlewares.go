@@ -1,12 +1,27 @@
 package middlewares
 
 import (
+	"compress/gzip"
 	"fmt"
-	"log/slog"
+	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/itaraxa/effectivepancake/internal/services"
 )
+
+type logger interface {
+	Debug(msg string, fields ...interface{})
+	Info(msg string, fields ...interface{})
+	Error(msg string, fields ...interface{})
+}
+
+type metricGetter interface {
+	GetMetrica(metricaType string, metricaName string) (interface{}, error)
+	GetAllMetrics() interface{}
+}
 
 /*
 Helper structure for the middleware function
@@ -37,34 +52,25 @@ Middleware function for logging requests
 
 Args:
 
-	logger *slog.logger: pointer to logger
+	l logger: implementation of logger interface
 
 Returns:
 
 	func(next http.Handler) http.Handler
 */
-func LoggerMiddleware(logger *slog.Logger) func(next http.Handler) http.Handler {
+func LoggerMiddleware(l logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Request
 			start := time.Now()
 			wrappedWriter := &responseWriterWrapper{ResponseWriter: w, statusCode: http.StatusOK}
-			logger.Debug("Request received",
-				slog.String("method", r.Method),
-				slog.String("path", r.URL.Path),
-				slog.String("remote_addr", r.RemoteAddr),
-			)
+			l.Info("Request received", "method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr)
 
 			// Doing next middleware
 			next.ServeHTTP(wrappedWriter, r)
 
 			// Response
-			logger.Debug("Request completed",
-				slog.String("method", r.Method),
-				slog.String("path", r.URL.Path),
-				slog.Int("status", wrappedWriter.statusCode),
-				slog.Duration("duration", time.Since(start)),
-			)
+			l.Info("Request completed", "method", r.Method, "path", r.URL.Path, "status", wrappedWriter.statusCode, "duration", time.Since(start))
 		})
 	}
 }
@@ -115,14 +121,14 @@ Middleware function for gathering statistics about requests. Collect status and 
 
 Args:
 
-	logger *slog.Logger: the logger for outputting stat information
+	l logger: implementation of logger interface
 	logInterval int: the number of requests to output information after
 
 Returns:
 
 	func(next http.Handler) http.Handler
 */
-func StatMiddleware(logger *slog.Logger, logInterval int) func(next http.Handler) http.Handler {
+func StatMiddleware(l logger, logInterval int) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			wrappedWriter := &responseWriterWrapper{ResponseWriter: w, statusCode: http.StatusOK}
@@ -134,10 +140,123 @@ func StatMiddleware(logger *slog.Logger, logInterval int) func(next http.Handler
 			stat.statType[r.Method] += 1
 			stat.statCode[wrappedWriter.statusCode] += 1
 			if stat.counter%logInterval == 0 {
-				logger.Info("Request stat:",
-					slog.Int("counter", stat.counter),
-					slog.String("Type stat", fmt.Sprintf("%v", stat.statType)),
-					slog.String("StatusCode stat", fmt.Sprintf("%v", stat.statCode)))
+				l.Info("Request stat:", "counter", stat.counter, "Type stat", fmt.Sprintf("%v", stat.statType), "StatusCode stat", fmt.Sprintf("%v", stat.statCode))
+			}
+		})
+	}
+}
+
+/*
+Helper structure for the compress middleware function
+*/
+type gzipWriter struct {
+	http.ResponseWriter
+	Writer io.Writer
+}
+
+/*
+Substituting the built-in writer method with the compress implementation
+*/
+func (w gzipWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b)
+}
+
+/*
+CompressResponceMiddleware сompresses the response body to the client if it supports receiving compressed content
+
+Args:
+
+	l logger: a logger used for printing messages
+
+Returns:
+
+	func(next http.Handler) http.Handler
+*/
+func CompressResponceMiddleware(l logger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+				l.Info("Responce will not compressed")
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// compressing responce
+			gzw, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
+			if err != nil {
+				_, _ = w.Write([]byte(err.Error()))
+				l.Error("cannot compress responce", "error", err.Error())
+				return
+			}
+			defer gzw.Close()
+
+			w.Header().Set("Content-Encoding", "gzip")
+			next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gzw}, r)
+		})
+	}
+}
+
+/*
+DecompressRequestMiddleware decompresses gziped request body and returned uncompressed data.
+If request body is emty - nothing do
+
+Args:
+
+	l logger: object, implemented logger interface
+*/
+func DecompressRequestMiddleware(l logger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Content-Encoding") != "gzip" {
+				l.Debug("Request isn't compressed")
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Check for GET-requests with empty body
+			if r.Body != nil {
+				// decompress request
+				gzr, err := gzip.NewReader(r.Body)
+				if err != nil {
+					// TO-DO: добавить обработку ошибки - изменение статус кода ответа
+					l.Error("cannot decompress request", "error", err.Error())
+					return
+				}
+				defer gzr.Close()
+				r.Body = io.NopCloser(gzr)
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+/*
+SaveStorageToFile middleware saves all metric data to the io.WriterCloser after each successfully rocessed request.
+This is used for synchronous saving of metric data
+
+Args:
+
+	l logger: a logger used for printing messages
+	s storager: a storager that allows getting metric data
+	dst io.WriteCloser: a WriteCloser object for writing metric data
+
+Returns:
+
+	func(next http.Handler) http.Handler
+*/
+func SaveStorageToFile(l logger, s metricGetter, dst io.WriteCloser) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			wrappedWriter := &responseWriterWrapper{ResponseWriter: w, statusCode: http.StatusOK}
+			next.ServeHTTP(wrappedWriter, r)
+			if wrappedWriter.statusCode == http.StatusOK {
+				err := services.WriteMetricsWithTimestamp(s, dst)
+				if err != nil {
+					l.Error("error writing to file", "error", err.Error())
+					return
+				}
+				l.Debug("data writed")
 			}
 		})
 	}

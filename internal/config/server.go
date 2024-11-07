@@ -4,14 +4,18 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/itaraxa/effectivepancake/internal/version"
 )
 
 type ServerConfig struct {
-	Endpoint    string
-	LogLevel    string
-	ShowVersion bool
+	Endpoint        string
+	LogLevel        string
+	ShowVersion     bool
+	StoreInterval   int
+	FileStoragePath string
+	Restore         bool
 }
 
 /*
@@ -48,7 +52,9 @@ func (sc *ServerConfig) ParseFlags() error {
 	flag.BoolVar(&sc.ShowVersion, `v`, false, `Show version and exit`)
 	flag.StringVar(&sc.Endpoint, `a`, `localhost:8080`, `HTTP-server endpoint address`)
 	flag.StringVar(&sc.LogLevel, `log`, `INFO`, `Set log level: INFO, DEBUG, etc.`)
-
+	flag.BoolVar(&sc.Restore, `r`, true, `Restore saved data from the file`)
+	flag.StringVar(&sc.FileStoragePath, `f`, `metrics.dat`, `File path for saving metrics`)
+	flag.IntVar(&sc.StoreInterval, `i`, 300, `Time interval after which the current metrics are saved to a file. If set to 0, data is saved synchronously`)
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Version: %s\nUsage of %s\n", version.ServerVersion, os.Args[0])
 		flag.PrintDefaults()
@@ -77,6 +83,23 @@ func (sc *ServerConfig) ParseEnv() error {
 	addressServer, ok := os.LookupEnv(`ADDRESS`)
 	if ok {
 		sc.Endpoint = addressServer
+	}
+	if storeInterval, ok := os.LookupEnv(`STORE_INTERVAL`); ok {
+		i, err := strconv.Atoi(storeInterval)
+		if err != nil {
+			return fmt.Errorf(`uncorrect value in environment variable: %v`, err)
+		}
+		sc.StoreInterval = i
+	}
+	if fileStoragePath, ok := os.LookupEnv(`FILE_STORAGE_PATH`); ok {
+		sc.FileStoragePath = fileStoragePath
+	}
+	if restore, ok := os.LookupEnv(`RESTORE`); ok {
+		r, err := strconv.ParseBool(restore)
+		if err != nil {
+			return fmt.Errorf(`uncorrect value in environment variable: %v`, err)
+		}
+		sc.Restore = r
 	}
 	return nil
 }

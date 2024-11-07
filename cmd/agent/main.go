@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -10,19 +9,20 @@ import (
 	"time"
 
 	"github.com/itaraxa/effectivepancake/internal/config"
+	"github.com/itaraxa/effectivepancake/internal/logger"
 	"github.com/itaraxa/effectivepancake/internal/services"
 	"github.com/itaraxa/effectivepancake/internal/version"
 )
 
 type AgentApp struct {
-	logger     *slog.Logger
+	logger     logger.Logger
 	httpClient *http.Client
 	config     *config.AgentConfig
 	wg         *sync.WaitGroup
 }
 
 // TO-DO: rewrite with interfaces
-func NewAgentApp(logger *slog.Logger, httpClient *http.Client, config *config.AgentConfig) *AgentApp {
+func NewAgentApp(logger logger.Logger, httpClient *http.Client, config *config.AgentConfig) *AgentApp {
 	return &AgentApp{
 		logger:     logger,
 		httpClient: httpClient,
@@ -32,16 +32,17 @@ func NewAgentApp(logger *slog.Logger, httpClient *http.Client, config *config.Ag
 }
 
 func (aa *AgentApp) Run() {
-	aa.logger.Info("Agent version", slog.String("Version", version.AgentVersion))
-	aa.logger.Info("Agent started",
-		slog.String("server", aa.config.AddressServer),
-		slog.Duration("poll interval", aa.config.PollInterval),
-		slog.Duration("report interval", aa.config.ReportInterval),
+	aa.logger.Info("Agent version", "Version", version.AgentVersion)
+	aa.logger.Info("Agent started", "server", aa.config.AddressServer,
+		"poll interval", aa.config.PollInterval,
+		"report interval", aa.config.ReportInterval,
+		"log level", aa.config.LogLevel,
+		"report mode", aa.config.ReportMode,
 	)
 	defer aa.logger.Info("Agent stopped")
 
 	var wg sync.WaitGroup
-	msCh := make(chan services.Metricer, aa.config.ReportInterval/aa.config.PollInterval+1) // создаем канал для обмена данными между сборщиком и отправщиком
+	msCh := make(chan services.MetricsAddGetter, aa.config.ReportInterval/aa.config.PollInterval+1) // создаем канал для обмена данными между сборщиком и отправщиком
 	defer close(msCh)
 
 	// Ctrl+C handling
@@ -51,7 +52,7 @@ func (aa *AgentApp) Run() {
 	reportStopChan := make(chan bool, 1)
 	go func() {
 		<-signalChan
-		aa.logger.Info("Agent stopping", slog.String("reason", "Ctrl+C press"))
+		aa.logger.Info("Agent stopping", "reason", "Ctrl+C press")
 		// sending true to the control channel if polling/reporting should stop
 		// reading from channel for unblocking
 		<-pollingStopChan
@@ -90,21 +91,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	var level slog.Level
-	switch agentConf.LogLevel {
-	case "DEBUG":
-		level = slog.LevelDebug
-	case "INFO":
-		level = slog.LevelInfo
-	case "WARN":
-		level = slog.LevelWarn
-	case "ERROR":
-		level = slog.LevelError
-	default:
-		level = slog.LevelInfo
+	logger, err := logger.NewZapLogger(agentConf.LogLevel)
+	if err != nil {
+		panic(err)
 	}
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
-
+	defer logger.Sync()
 	myClient := &http.Client{
 		Timeout: 1 * time.Second,
 	}

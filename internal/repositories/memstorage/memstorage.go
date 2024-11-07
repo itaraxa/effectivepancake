@@ -57,7 +57,7 @@ func (m *MemStorage) AddCounter(metricName string, value int64) error {
 }
 
 /*
-Get metrica value grom MemStorage by metrica name
+GetMetrica Get metrica value grom MemStorage by metrica name
 
 Args:
 
@@ -69,27 +69,40 @@ Returns:
 	string: value of metrica in the string representation
 	error: nil or error if metrica was not found in the MemStorage
 */
-func (m *MemStorage) GetMetrica(metricaType string, metricaName string) (string, error) {
+func (m *MemStorage) GetMetrica(metricaType string, metricaName string) (interface{}, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	switch metricaType {
 	case "gauge":
 		if _, ok := m.Gauge[metricaName]; !ok {
-			return "", errors.ErrMetricaNotFaund
+			return nil, errors.ErrMetricaNotFaund
 		}
-		return fmt.Sprintf("%g", m.Gauge[metricaName]), nil
+		return m.Gauge[metricaName], nil
 
 	case "counter":
 		if _, ok := m.Counter[metricaName]; !ok {
-			return "", errors.ErrMetricaNotFaund
+			return nil, errors.ErrMetricaNotFaund
 		}
-		return fmt.Sprintf("%d", m.Counter[metricaName]), nil
+		return m.Counter[metricaName], nil
 
 	default:
 		// case with uncorrect type of metrica
-		return "", errors.ErrMetricaNotFaund
+		return nil, errors.ErrMetricaNotFaund
 	}
+}
+
+/*
+GetAllMetrica return copy of data in memory storage
+*/
+func (m *MemStorage) GetAllMetrics() interface{} {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return struct {
+		Gauges   map[string]float64 `json:"gauges"`
+		Counters map[string]int64   `json:"counters"`
+	}{m.Gauge, m.Counter}
 }
 
 /*

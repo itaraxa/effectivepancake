@@ -27,3 +27,8 @@ vendor/
 # Tests utility from Yandex Practicum repo
 test/devopstest-darwin-arm64
 test/metricstest-darwin-arm64
+test/*.sh
+metrictest
+
+metrics.dat
+temp*

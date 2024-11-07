@@ -4,17 +4,18 @@ import "errors"
 
 var (
 	// Server errors
-	ErrParseGauge           = errors.New("gauge value parsing error")
-	ErrParseCounter         = errors.New("counter value parsing error")
-	ErrBadType              = errors.New("bad type in raw query string")
-	ErrBadName              = errors.New("bad name in raw query string")
-	ErrBadValue             = errors.New("bad value in raw query string")
-	ErrBadRawQuery          = errors.New("bad raw query string")
-	ErrMetricaNotFaund      = errors.New("unknown metrica")
-	ErrUpdateGauge          = errors.New("gauge value updating error")
-	ErrAddCounter           = errors.New("counter value adding error")
-	ErrEmptyMetricaName     = errors.New("empty metric name in query")
-	ErrEmptyMetricaRawValue = errors.New("empty metrica raw value in query")
+	ErrParseGauge              = errors.New("gauge value parsing error")
+	ErrParseCounter            = errors.New("counter value parsing error")
+	ErrBadType                 = errors.New("bad type in query for update")
+	ErrBadName                 = errors.New("bad name in raw query string")
+	ErrBadValue                = errors.New("bad value in raw query string")
+	ErrBadRawQuery             = errors.New("bad raw query string")
+	ErrMetricaNotFaund         = errors.New("unknown metrica")
+	ErrUpdateGauge             = errors.New("gauge value updating error")
+	ErrAddCounter              = errors.New("counter value adding error")
+	ErrEmptyMetricaName        = errors.New("empty metric name in query")
+	ErrEmptyMetricaRawValue    = errors.New("empty metrica raw value in query")
+	ErrGettingAnswerFromServer = errors.New("cannot read server answer")
 
 	// Agent errors
 	ErrRequestCreating        = errors.New("creating request error")
