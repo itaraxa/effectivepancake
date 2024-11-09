@@ -12,6 +12,7 @@ type MetricStorager interface {
 	MetricUpdater
 	MetricPrinter
 	PingContext(context.Context) error
+	Close() error
 }
 
 type MetricUpdater interface {
