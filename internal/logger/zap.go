@@ -72,6 +72,11 @@ func (zl *ZapLogger) Error(msg string, fields ...interface{}) {
 	zl.logger.Error(msg, zapFields...)
 }
 
+func (zl *ZapLogger) Fatal(msg string, fields ...interface{}) {
+	zapFields := convertToZapFields(fields...)
+	zl.logger.Fatal(msg, zapFields...)
+}
+
 func (zl *ZapLogger) Sync() {
 	_ = zl.logger.Sync()
 
