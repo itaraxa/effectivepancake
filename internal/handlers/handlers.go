@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	myErrors "github.com/itaraxa/effectivepancake/internal/errors"
@@ -14,9 +15,17 @@ import (
 	"github.com/itaraxa/effectivepancake/internal/services"
 )
 
+const (
+	GAUGE                   = `gauge`
+	COUNTER                 = `counter`
+	MAX_QUERY_STRING_LENGTH = 256
+)
+
 type logger interface {
 	Error(msg string, fields ...interface{})
 	Info(msg string, fields ...interface{})
+	Debug(msg string, fields ...interface{})
+	Fatal(msg string, fields ...interface{})
 }
 
 type metricStorager interface {
@@ -92,9 +101,9 @@ func GetMetrica(s metricGetter, l logger) http.HandlerFunc {
 
 		res := ""
 		switch chi.URLParam(req, "type") {
-		case "gauge":
+		case GAUGE:
 			res = fmt.Sprint(v.(float64))
-		case "counter":
+		case COUNTER:
 			res = fmt.Sprint(v.(int64))
 		}
 		_, _ = w.Write([]byte(res))
@@ -102,7 +111,8 @@ func GetMetrica(s metricGetter, l logger) http.HandlerFunc {
 }
 
 /*
-JSONGetMetrica creates a handler that return metrica value in JSON
+JSONGetMetrica creates a handler that return metrica value in JSON.
+Timeout for getting metrica from storage is 5 seconds.
 
 Args:
 
@@ -115,6 +125,8 @@ Returns:
 */
 func JSONGetMetrica(s metricGetter, l logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 		// Checks
 		if req.Method != http.MethodPost {
 			http.Error(w, "Only POST request allowed", http.StatusMethodNotAllowed)
@@ -137,7 +149,7 @@ func JSONGetMetrica(s metricGetter, l logger) http.HandlerFunc {
 			return
 		}
 		l.Info("received a request to get metrica in JSON", "type", jm.GetMetricaType(), "name", jm.GetMetricaName())
-		valueFromStorage, err := s.GetMetrica(context.TODO(), jm.GetMetricaType(), jm.GetMetricaName())
+		valueFromStorage, err := s.GetMetrica(ctx, jm.GetMetricaType(), jm.GetMetricaName())
 		if err != nil && errors.Is(err, myErrors.ErrMetricaNotFaund) {
 			w.WriteHeader(http.StatusNotFound)
 			l.Error("cannot get metrica", "type", jm.GetMetricaType(), "name", jm.GetMetricaName(), "error", err.Error())
@@ -151,10 +163,10 @@ func JSONGetMetrica(s metricGetter, l logger) http.HandlerFunc {
 
 		// Type switching
 		switch jm.GetMetricaType() {
-		case "gauge":
+		case GAUGE:
 			t := valueFromStorage.(float64)
 			jm.Value = &t
-		case "counter":
+		case COUNTER:
 			t := valueFromStorage.(int64)
 			jm.Delta = &t
 		}
@@ -191,30 +203,36 @@ Returns:
 */
 func UpdateHandler(l logger, s metricUpdater) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
+		queryString := req.URL.Path
 		// Checks
 		if req.Method != http.MethodPost {
 			http.Error(w, "Only POST request allowed", http.StatusMethodNotAllowed)
 			l.Error("Only POST request allowed")
 			return
 		}
+		if len(queryString) > MAX_QUERY_STRING_LENGTH {
+			http.Error(w, "Query sting too long", http.StatusBadRequest)
+			l.Error("query string too long", "query string", queryString[:MAX_QUERY_STRING_LENGTH], "query string length", len(queryString))
+			return
+		}
 
 		// Processing
-		q, err := services.ParseQueryString(req.URL.Path)
+		q, err := services.ParseQueryString(queryString)
 		if err != nil && (errors.Is(err, myErrors.ErrBadRawQuery) ||
 			errors.Is(err, myErrors.ErrEmptyMetricaName) ||
 			errors.Is(err, myErrors.ErrEmptyMetricaRawValue)) {
 			http.Error(w, "query string does not match the format", http.StatusNotFound)
-			l.Error("query string does not match the format", "query string", req.URL.Path, "error", err.Error())
+			l.Error("query string does not match the format", "query string", queryString, "error", err.Error())
 			return
 		}
 		if err != nil && (errors.Is(err, myErrors.ErrBadType) || errors.Is(err, myErrors.ErrBadValue)) {
 			http.Error(w, "invalid type or value", http.StatusBadRequest)
-			l.Error("invalid type or value", "query string", req.URL.Path, "error", err.Error())
+			l.Error("invalid type or value", "query string", queryString, "error", err.Error())
 			return
 		}
 		if err != nil {
 			http.Error(w, "unknown parse query error", http.StatusInternalServerError)
-			l.Error("unknown parse query error", "query string", req.URL.Path, "error", err.Error())
+			l.Error("unknown parse query error", "query string", queryString, "error", err.Error())
 			return
 		}
 
@@ -283,12 +301,12 @@ func JSONUpdateHandler(l logger, s metricStorager) http.HandlerFunc {
 			l.Error("cannot update metrica", "data", buf.String(), "error", "any metric value is not set")
 			return
 		}
-		if jm.Delta == nil && jm.MType == `counter` {
+		if jm.Delta == nil && jm.MType == COUNTER {
 			http.Error(w, "the counter delta is not set", http.StatusBadRequest)
 			l.Error("cannot update metrica", "data", buf.String(), "error", "the counter delta is not set")
 			return
 		}
-		if jm.Value == nil && jm.MType == `gauge` {
+		if jm.Value == nil && jm.MType == GAUGE {
 			http.Error(w, "the gauge value is not set", http.StatusBadRequest)
 			l.Error("cannot update metrica", "data", buf.String(), "error", "the gauge value is not set")
 			return
@@ -299,6 +317,7 @@ func JSONUpdateHandler(l logger, s metricStorager) http.HandlerFunc {
 		if err != nil && (errors.Is(err, myErrors.ErrParseGauge) || errors.Is(err, myErrors.ErrParseCounter)) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			l.Error("the value is not of the specified type", "json query", jm.String(), "error", err.Error())
+			return
 		}
 		if err != nil && errors.Is(err, myErrors.ErrBadType) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -320,10 +339,10 @@ func JSONUpdateHandler(l logger, s metricStorager) http.HandlerFunc {
 
 		resp := jm
 		switch jm.GetMetricaType() {
-		case "gauge":
+		case GAUGE:
 			g, _ := value.(float64)
 			resp.Value = &g
-		case "counter":
+		case COUNTER:
 			c, _ := value.(int64)
 			resp.Delta = &c
 		}
