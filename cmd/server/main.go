@@ -33,7 +33,7 @@ NewServerApp creates an empty instance of the serverApp structure
 Args:
 
 	logger logger.Logger: object, implementing the logger.Logger interface
-	storage *memstorage.MemStorage: pointer to memstorage.MemStorage object
+	storage services.MetricStorager: object, implementing the services.MetricStorager interface
 	router *chi.Mux: http router
 	config  *config.ServerConfig: pointer to config.ServerConfig instance
 
@@ -83,6 +83,7 @@ func (sa *ServerApp) Run() {
 		} else {
 			sa.logger.Error("metric data hasn't been saved to the file", "error", err.Error(), "filename", sa.config.FileStoragePath)
 		}
+		_ = sa.storage.Close()
 		os.Exit(0)
 	}()
 
@@ -112,7 +113,6 @@ func (sa *ServerApp) Run() {
 
 	// Add middlewares
 	sa.router.Use(middlewares.LoggerMiddleware(sa.logger))
-	// sa.router.Use(middleware.Compress(5, "application/json"))
 	sa.router.Use(middlewares.CompressResponceMiddleware(sa.logger))
 	sa.router.Use(middlewares.DecompressRequestMiddleware(sa.logger))
 	sa.router.Use(middlewares.StatMiddleware(sa.logger, 10))
@@ -128,21 +128,25 @@ func (sa *ServerApp) Run() {
 	}
 
 	// Add routes
-	sa.router.Get(`/ping{slash:/*}`, handlers.PingDB(sa.logger, sa.storage))
-	// sa.router.Get(`/ping`, handlers.Ping(sa.logger, sa.config.DatabaseDSN))
-	// sa.router.Get(`/ping/`, handlers.Ping(sa.logger, sa.config.DatabaseDSN))
+	// sa.router.Get(`/ping{slash:/*}`, handlers.PingDB(sa.logger, sa.storage))
+	// health-checks
+	sa.router.Get(`/ping`, handlers.PingDB(sa.logger, sa.storage))
+	sa.router.Get(`/ping/`, handlers.PingDB(sa.logger, sa.storage))
+	// query-row routs
 	sa.router.Get(`/value/{type}/{name}`, handlers.GetMetrica(sa.storage, sa.logger))
+	sa.router.Post(`/update/*`, handlers.UpdateHandler(sa.logger, sa.storage))
+	// json routs
+	sa.router.Post(`/value`, handlers.JSONGetMetrica(sa.storage, sa.logger))
 	sa.router.Post(`/value/`, handlers.JSONGetMetrica(sa.storage, sa.logger))
 	sa.router.Post(`/update/`, handlers.JSONUpdateHandler(sa.logger, sa.storage))
-	sa.router.Post(`/update/*`, handlers.UpdateHandler(sa.logger, sa.storage))
+	// get all metrics
 	sa.router.Get(`/`, handlers.GetAllCurrentMetrics(sa.storage, sa.logger))
 
 	// Start router
 	sa.logger.Info("start router")
 	err := http.ListenAndServe(sa.config.Endpoint, sa.router)
 	if err != nil {
-		sa.logger.Error(fmt.Sprintf("router error: %v", err))
-		os.Exit(1)
+		sa.logger.Fatal(fmt.Sprintf("router error: %v", err))
 	}
 }
 
@@ -151,17 +155,17 @@ func main() {
 	err := serverConf.ParseFlags()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error parsing flags: %v", err)
-		os.Exit(1)
+		return
 	}
 	if serverConf.ShowVersion {
 		fmt.Println(version.ServerVersion)
-		os.Exit(0)
+		return
 	}
 
 	err = serverConf.ParseEnv()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error parsing environment variable: %v", err)
-		os.Exit(1)
+		return
 	}
 
 	logger, err := logger.NewZapLogger(serverConf.LogLevel)
@@ -172,12 +176,12 @@ func main() {
 
 	r := chi.NewRouter()
 
-	// var s services.MetricStorager
 	if serverConf.DatabaseDSN != "" {
 		s, err := postgres.NewPostgresRepository(serverConf.DatabaseDSN)
 		if err != nil {
 			panic(err)
 		}
+		defer s.Close()
 		app := NewServerApp(logger, s, r, serverConf)
 		app.Run()
 	} else {
