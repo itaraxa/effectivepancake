@@ -229,3 +229,11 @@ func NewMemStorage() *MemStorage {
 func (m *MemStorage) PingContext(ctx context.Context) error {
 	return nil
 }
+
+func (m *MemStorage) Close() error {
+	m.mu.Unlock()
+	defer m.mu.Lock()
+	clear(m.Gauge)
+	clear(m.Counter)
+	return nil
+}
