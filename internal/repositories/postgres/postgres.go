@@ -9,6 +9,11 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
+const (
+	GAUGE   = `gauge`
+	COUNTER = `counter`
+)
+
 type metricStorager interface {
 	metricGetter
 	metricUpdater
@@ -31,6 +36,9 @@ type metricPrinter interface {
 	HTML() string
 }
 
+/*
+PostgresRepository is the struct for wrapping PostgreSQL storage
+*/
 type PostgresRepository struct {
 	db *sql.DB
 }
@@ -52,6 +60,15 @@ func NewPostgresRepository(databaseURL string) (*PostgresRepository, error) {
 	if err != nil {
 		return &PostgresRepository{}, err
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = prepareTablesContext(ctx, db)
+	if err != nil {
+		return &PostgresRepository{}, fmt.Errorf("cannot create tables in database storage: %w", err)
+	}
+
 	return &PostgresRepository{db: db}, nil
 }
 
@@ -88,35 +105,6 @@ func (pr *PostgresRepository) Close() error {
 }
 
 /*
-PrepareTablesContext create tables for metrice storage if not exist
-
-Args:
-
-	ctx context.Context
-
-Returns:
-
-	error: nil or an error that occurred while processing the request
-*/
-func (pr *PostgresRepository) PrepareTablesContext(ctx context.Context) error {
-	_, err := pr.db.ExecContext(ctx, "CREATE TABLE IF NOT EXIST metrics ('metric_id' bigint, 'metric_name' text, 'metric_type', text)")
-	if err != nil {
-		return err
-	}
-
-	_, err = pr.db.ExecContext(ctx, "CREATE TABLE IF NOT EXIST gauges ('metric_id' bigint, 'value' double precision, 'timestamp' timestamptz)")
-	if err != nil {
-		return err
-	}
-
-	_, err = pr.db.ExecContext(ctx, "CREATE TABLE IF NOT EXIST counters ('metric_id' bigint, 'delta' bigint, 'timestamp' timestamptz)")
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-/*
 UpdateGauge add gauge into db storage. Adding a timestamp to determine the most recent value
 
 Args:
@@ -138,7 +126,7 @@ func (pr *PostgresRepository) UpdateGauge(ctx context.Context, metricName string
 }
 
 /*
-UpdateCounter add counter into db storage. Adding a timestamp to determine the most recent value
+Update add counter into db storage. Adding a timestamp to determine the most recent value
 
 Args:
 
@@ -207,7 +195,7 @@ Returns:
 */
 func (pr *PostgresRepository) GetMetrica(ctx context.Context, metricaType string, metricaName string) (interface{}, error) {
 	switch metricaType {
-	case `gauge`:
+	case GAUGE:
 		row := pr.db.QueryRowContext(ctx, "SELCET value FROM gauges WHERE id = $1 AND timestamp = (SELECT MAX(timestamp FROM gauges));", metricaName)
 		var gauge sql.NullFloat64
 		err := row.Scan(&gauge)
@@ -218,7 +206,7 @@ func (pr *PostgresRepository) GetMetrica(ctx context.Context, metricaType string
 			return nil, fmt.Errorf("empty gauge value in db")
 		}
 		return gauge.Float64, nil
-	case `counter`:
+	case COUNTER:
 		row := pr.db.QueryRowContext(ctx, "SELCET value FROM counters WHERE id = $1 AND timestamp = (SELECT MAX(timestamp FROM counters));", metricaName)
 		var delta sql.NullInt64
 		err := row.Scan(delta)
