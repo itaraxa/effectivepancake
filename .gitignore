@@ -20,15 +20,17 @@ cmd/server/server
 # Dependency directories (remove the comment below to include it)
 vendor/
 
-# IDEs directories
+# IDEs ans MacOS directories
 .idea
 .vscode
+.DS_Store
 
 # Tests utility from Yandex Practicum repo
 test/
 metrictest
 
-metrics.dat
+# My test files
+*.dat
 temp*
 
 task/
