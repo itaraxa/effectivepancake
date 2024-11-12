@@ -199,12 +199,13 @@ func (pr *PostgresRepository) AddCounter(ctx context.Context, metricName string,
 		} else {
 			return fmt.Errorf("cannot check counter delta in DB: %w", err)
 		}
-	}
-	// delta-value in db
-	newDelta := currentDelta + delta
-	_, err = tx.ExecContext(ctx, "INSERT INTO counters (metric_id, metric_delta, metric_timestamp) VALUES ($1, $2, $3);", metricName, newDelta, time.Now())
-	if err != nil {
-		return fmt.Errorf("cannot update record: %w", err)
+	} else {
+		// delta-value in db
+		newDelta := currentDelta + delta
+		_, err = tx.ExecContext(ctx, "INSERT INTO counters (metric_id, metric_delta, metric_timestamp) VALUES ($1, $2, $3);", metricName, newDelta, time.Now())
+		if err != nil {
+			return fmt.Errorf("cannot update record: %w", err)
+		}
 	}
 
 	return nil
@@ -242,14 +243,14 @@ func (pr *PostgresRepository) AddBatchCounter(ctx context.Context, metrics map[s
 			} else {
 				return fmt.Errorf("cannot check counter delta in DB: %w", err)
 			}
+		} else {
+			// delta-value in db
+			newDelta := currentDelta + *delta
+			_, err = tx.ExecContext(ctx, "INSERT INTO counters (metric_id, metric_delta, metric_timestamp) VALUES ($1, $2, $3);", metricName, newDelta, time.Now())
+			if err != nil {
+				return fmt.Errorf("cannot update record: %w", err)
+			}
 		}
-		// delta-value in db
-		newDelta := currentDelta + *delta
-		_, err = tx.ExecContext(ctx, "INSERT INTO counters (metric_id, metric_delta, metric_timestamp) VALUES ($1, $2, $3);", metricName, newDelta, time.Now())
-		if err != nil {
-			return fmt.Errorf("cannot update record: %w", err)
-		}
-
 	}
 	return nil
 }
