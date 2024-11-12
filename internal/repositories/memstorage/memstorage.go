@@ -36,6 +36,13 @@ func (m *MemStorage) UpdateGauge(ctx context.Context, metricName string, value f
 	return nil
 }
 
+func (m *MemStorage) UpdateBatchGauge(ctx context.Context, metrics map[string]*float64) error {
+	for metricName, metricValue := range metrics {
+		m.Gauge[metricName] = *metricValue
+	}
+	return nil
+}
+
 /*
 Add counter value of metrica to MemStorage. If exists - value will be added
 
@@ -54,6 +61,17 @@ func (m *MemStorage) AddCounter(ctx context.Context, metricName string, delta in
 
 	m.Counter[metricName] += delta
 
+	return nil
+}
+
+func (m *MemStorage) AddBatchCounter(ctx context.Context, metrics map[string]*int64) error {
+	for metricName, metricDelta := range metrics {
+		if currentDelta, ok := m.Counter[metricName]; ok {
+			m.Counter[metricName] = currentDelta + *metricDelta
+		} else {
+			m.Counter[metricName] = *metricDelta
+		}
+	}
 	return nil
 }
 

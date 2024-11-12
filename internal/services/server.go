@@ -14,6 +14,11 @@ import (
 	"github.com/itaraxa/effectivepancake/internal/models"
 )
 
+const (
+	gauge   = `gauge`
+	counter = `counter`
+)
+
 /*
 Creating new instance of models.Query from request.URL string
 
@@ -61,7 +66,7 @@ Returns:
 */
 func UpdateMetrica(q Querier, s MetricUpdater) error {
 	switch q.GetMetricaType() {
-	case "gauge":
+	case gauge:
 		g, err := strconv.ParseFloat(q.GetMetricaRawValue(), 64)
 		if err != nil {
 			return errors.ErrParseGauge
@@ -70,7 +75,7 @@ func UpdateMetrica(q Querier, s MetricUpdater) error {
 		if err != nil {
 			return errors.ErrUpdateGauge
 		}
-	case "counter":
+	case counter:
 		c, err := strconv.Atoi(q.GetMetricaRawValue())
 		if err != nil {
 			return errors.ErrParseCounter
@@ -99,12 +104,12 @@ Returns:
 */
 func JSONUpdateMetrica(jmq JSONMetricaQuerier, mu MetricUpdater) error {
 	switch jmq.GetMetricaType() {
-	case "gauge":
+	case gauge:
 		err := mu.UpdateGauge(context.TODO(), jmq.GetMetricaName(), *jmq.GetMetricaValue())
 		if err != nil {
 			return errors.ErrUpdateGauge
 		}
-	case "counter":
+	case counter:
 		err := mu.AddCounter(context.TODO(), jmq.GetMetricaName(), *jmq.GetMetricaCounter())
 		if err != nil {
 			return errors.ErrAddCounter
@@ -283,6 +288,42 @@ func LoadMetricsFromFile(l logger, mu MetricUpdater, fileName string) error {
 		return err
 	}
 	l.Info("metrics have been loaded", "origin timestamp", timeStamp)
+
+	return nil
+}
+
+func JSONUpdateBatchMetrica(l logger, jmqs []JSONMetricaQuerier, mbu MetricBatchUpdater) error {
+	gaugeBath := make(map[string]*float64)
+	counterBatch := make(map[string]*int64)
+	for _, jmq := range jmqs {
+		switch jmq.GetMetricaType() {
+		case gauge:
+			name := jmq.GetMetricaName()
+			value := jmq.GetMetricaValue()
+			gaugeBath[name] = value
+
+		case counter:
+			name := jmq.GetMetricaName()
+			delta := jmq.GetMetricaCounter()
+			counterBatch[name] = delta
+		}
+	}
+	l.Debug("get batch for load", "gauges", len(gaugeBath), "counters", len(counterBatch))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	err := mbu.UpdateBatchGauge(ctx, gaugeBath)
+	if err != nil {
+		l.Error("updating gauge batch", "error", err.Error())
+		return err
+	}
+
+	err = mbu.AddBatchCounter(ctx, counterBatch)
+	if err != nil {
+		l.Error("updating counter batch", "error", err.Error())
+		return err
+	}
 
 	return nil
 }

@@ -10,6 +10,7 @@ import (
 type MetricStorager interface {
 	MetricGetter
 	MetricUpdater
+	MetricBatchUpdater
 	MetricPrinter
 	PingContext(context.Context) error
 	Close() error
@@ -18,6 +19,11 @@ type MetricStorager interface {
 type MetricUpdater interface {
 	UpdateGauge(context.Context, string, float64) error
 	AddCounter(context.Context, string, int64) error
+}
+
+type MetricBatchUpdater interface {
+	UpdateBatchGauge(context.Context, map[string]*float64) error
+	AddBatchCounter(context.Context, map[string]*int64) error
 }
 
 type MetricGetter interface {

@@ -126,6 +126,35 @@ func (pr *PostgresRepository) UpdateGauge(ctx context.Context, metricName string
 	return nil
 }
 
+func (pr *PostgresRepository) UpdateBatchGauge(ctx context.Context, metrics map[string]*float64) error {
+	// init transacion
+	tx, err := pr.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("cannot start transaction: %w", err)
+	}
+	// rollback on error and commit if all ok
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback()
+			panic(p)
+		} else if err != nil {
+			_ = tx.Rollback()
+		} else {
+			err = tx.Commit()
+		}
+	}()
+
+	for metricName, value := range metrics {
+		_, err := pr.db.ExecContext(ctx, "INSERT INTO gauges (metric_id, metric_value) VALUES ($1, $2);", metricName, *value)
+		if err != nil {
+			fmt.Println(err.Error())
+			return err
+		}
+	}
+
+	return nil
+}
+
 /*
 Update add counter into db storage. Adding a timestamp to determine the most recent value
 
@@ -178,6 +207,50 @@ func (pr *PostgresRepository) AddCounter(ctx context.Context, metricName string,
 		return fmt.Errorf("cannot update record: %w", err)
 	}
 
+	return nil
+}
+
+func (pr *PostgresRepository) AddBatchCounter(ctx context.Context, metrics map[string]*int64) error {
+	// init transaction
+	tx, err := pr.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("cannot start transaction: %w", err)
+	}
+	// rollback on error and commit if all ok
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback()
+			panic(p)
+		} else if err != nil {
+			_ = tx.Rollback()
+		} else {
+			err = tx.Commit()
+		}
+	}()
+
+	for metricName, delta := range metrics {
+		// check delta-value in db
+		var currentDelta int64
+		err = tx.QueryRowContext(ctx, "SELECT metric_delta FROM counters WHERE metric_id = $1 ORDER BY metric_timestamp DESC LIMIT 1;", metricName).Scan(&currentDelta)
+		if err != nil {
+			// delta-value not in db
+			if err == sql.ErrNoRows {
+				_, err = tx.ExecContext(ctx, "INSERT INTO counters (metric_id, metric_delta, metric_timestamp) VALUES ($1, $2, $3);", metricName, *delta, time.Now())
+				if err != nil {
+					return fmt.Errorf("cannot insert new record: %w", err)
+				}
+			} else {
+				return fmt.Errorf("cannot check counter delta in DB: %w", err)
+			}
+		}
+		// delta-value in db
+		newDelta := currentDelta + *delta
+		_, err = tx.ExecContext(ctx, "INSERT INTO counters (metric_id, metric_delta, metric_timestamp) VALUES ($1, $2, $3);", metricName, newDelta, time.Now())
+		if err != nil {
+			return fmt.Errorf("cannot update record: %w", err)
+		}
+
+	}
 	return nil
 }
 

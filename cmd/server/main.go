@@ -139,6 +139,7 @@ func (sa *ServerApp) Run() {
 	sa.router.Post(`/value`, handlers.JSONGetMetrica(sa.storage, sa.logger))
 	sa.router.Post(`/value/`, handlers.JSONGetMetrica(sa.storage, sa.logger))
 	sa.router.Post(`/update/`, handlers.JSONUpdateHandler(sa.logger, sa.storage))
+	sa.router.Post(`/updates/`, handlers.JSONUpdateBatchHandler(sa.logger, sa.storage))
 	// get all metrics
 	sa.router.Get(`/`, handlers.GetAllCurrentMetrics(sa.storage, sa.logger))
 

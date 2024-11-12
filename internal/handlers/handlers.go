@@ -31,6 +31,7 @@ type logger interface {
 type metricStorager interface {
 	metricGetter
 	metricUpdater
+	metricBatchUpdater
 }
 
 type metricGetter interface {
@@ -40,6 +41,11 @@ type metricGetter interface {
 type metricUpdater interface {
 	UpdateGauge(ctx context.Context, metricName string, value float64) error
 	AddCounter(ctx context.Context, metricName string, value int64) error
+}
+
+type metricBatchUpdater interface {
+	UpdateBatchGauge(context.Context, map[string]*float64) error
+	AddBatchCounter(context.Context, map[string]*int64) error
 }
 
 type metricPrinter interface {
@@ -352,5 +358,58 @@ func JSONUpdateHandler(l logger, s metricStorager) http.HandlerFunc {
 		w.Header().Set("Content-Type", "applicttion/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(body)
+	}
+}
+
+func JSONUpdateBatchHandler(l logger, s metricStorager) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		// Checks
+		if req.Method != http.MethodPost {
+			http.Error(w, "Only POST request allowed", http.StatusMethodNotAllowed)
+			l.Error("Only POST request allowed")
+			return
+		}
+		// Processing
+		var buf bytes.Buffer
+		_, err := buf.ReadFrom(req.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			l.Error("cannot read from request body")
+			return
+		}
+		var jms []models.JSONMetric
+		if err = json.Unmarshal(buf.Bytes(), &jms); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			l.Error("cannot unmarshal data", "data", buf.String(), "error", err.Error())
+			return
+		}
+
+		// convert slice of models.JSONMetric into slice of services.JSONMetricaQuerier
+		var jmqs []services.JSONMetricaQuerier
+		for _, jmq := range jms {
+			jmqs = append(jmqs, jmq)
+		}
+
+		// updating metrica in storage
+		err = services.JSONUpdateBatchMetrica(l, jmqs, s)
+		// if err != nil && (errors.Is(err, myErrors.ErrParseGauge) || errors.Is(err, myErrors.ErrParseCounter)) {
+		// 	http.Error(w, err.Error(), http.StatusBadRequest)
+		// 	l.Error("the value is not of the specified type", "json query", jms.String(), "error", err.Error())
+		// 	return
+		// }
+		// if err != nil && errors.Is(err, myErrors.ErrBadType) {
+		// 	http.Error(w, err.Error(), http.StatusBadRequest)
+		// 	l.Error("unknown metrica type update error", "json query", jm.String(), "error", err.Error())
+		// 	return
+		// }
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			l.Error("metrica update error", "json query", buf.String(), "error", err.Error())
+			return
+		}
+
+		w.Header().Set("Content-Type", "applicttion/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(""))
 	}
 }
