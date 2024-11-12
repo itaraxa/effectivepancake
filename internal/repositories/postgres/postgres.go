@@ -14,27 +14,27 @@ const (
 	COUNTER = `counter`
 )
 
-type metricStorager interface {
-	metricGetter
-	metricUpdater
-	metricPrinter
-	PingContext(context.Context) error
-}
+// type metricStorager interface {
+// 	metricGetter
+// 	metricUpdater
+// 	metricPrinter
+// 	PingContext(context.Context) error
+// }
 
-type metricUpdater interface {
-	UpdateGauge(context.Context, string, float64) error
-	AddCounter(context.Context, string, int64) error
-}
+// type metricUpdater interface {
+// 	UpdateGauge(context.Context, string, float64) error
+// 	AddCounter(context.Context, string, int64) error
+// }
 
-type metricGetter interface {
-	GetMetrica(ctx context.Context, metricaType string, metricaName string) (interface{}, error)
-	GetAllMetrics(ctx context.Context) (interface{}, error)
-}
+// type metricGetter interface {
+// 	GetMetrica(ctx context.Context, metricaType string, metricaName string) (interface{}, error)
+// 	GetAllMetrics(ctx context.Context) (interface{}, error)
+// }
 
-type metricPrinter interface {
-	String() string
-	HTML() string
-}
+// type metricPrinter interface {
+// 	String() string
+// 	HTML() string
+// }
 
 /*
 PostgresRepository is the struct for wrapping PostgreSQL storage
