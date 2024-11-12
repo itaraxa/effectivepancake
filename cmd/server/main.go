@@ -98,8 +98,8 @@ func (sa *ServerApp) Run() {
 		}
 	}
 
-	// Writing metric data to the file periodically
-	if sa.config.StoreInterval > 0 {
+	// Writing metric data to the file periodically if don't use postgres storage
+	if sa.config.StoreInterval > 0 && sa.config.DatabaseDSN == "" {
 		go func() {
 			ticker := time.NewTicker(time.Second * time.Duration(sa.config.StoreInterval))
 			for {
@@ -116,7 +116,7 @@ func (sa *ServerApp) Run() {
 	sa.router.Use(middlewares.CompressResponceMiddleware(sa.logger))
 	sa.router.Use(middlewares.DecompressRequestMiddleware(sa.logger))
 	sa.router.Use(middlewares.StatMiddleware(sa.logger, 10))
-	if sa.config.StoreInterval == 0 {
+	if sa.config.StoreInterval == 0 && sa.config.DatabaseDSN == "" {
 		sa.logger.Info("synchronous file writing is used")
 		file, err := os.OpenFile(sa.config.FileStoragePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
 		if err != nil {
