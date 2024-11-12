@@ -162,7 +162,7 @@ func JSONGetMetrica(s metricGetter, l logger) http.HandlerFunc {
 			return
 		}
 		if err != nil {
-			http.Error(w, "unknown getting metrica error", http.StatusInternalServerError)
+			http.Error(w, "unknown getting metrica error", http.StatusNotFound)
 			l.Error("cannot get metrica", "type", jm.GetMetricaType(), "name", jm.GetMetricaName(), "error", err.Error())
 			return
 		}
