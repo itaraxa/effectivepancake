@@ -21,7 +21,7 @@ type logger interface {
 
 type metricGetter interface {
 	GetMetrica(ctx context.Context, metricaType string, metricaName string) (interface{}, error)
-	GetAllMetrics(ctx context.Context) interface{}
+	GetAllMetrics(ctx context.Context) (interface{}, error)
 }
 
 /*

@@ -128,7 +128,11 @@ Returns:
 	error: nil or error, if occured
 */
 func WriteMetrics(mg MetricGetter, dst io.Writer) error {
-	data, err := json.MarshalIndent(mg.GetAllMetrics(context.TODO()), "\t", "\t")
+	metrics, err := mg.GetAllMetrics(context.TODO())
+	if err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(metrics, "\t", "\t")
 	if err != nil {
 		return err
 	}
@@ -154,7 +158,7 @@ Returns:
 func WriteMetricsWithTimestamp(mg MetricGetter, dst io.Writer) error {
 	blob := make(map[string]interface{})
 	blob["timestamp"] = time.Now()
-	blob["metrics"] = mg.GetAllMetrics(context.TODO())
+	blob["metrics"], _ = mg.GetAllMetrics(context.TODO())
 
 	data, err := json.MarshalIndent(blob, "\t", "\t")
 	if err != nil {

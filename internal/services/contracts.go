@@ -22,7 +22,7 @@ type MetricUpdater interface {
 
 type MetricGetter interface {
 	GetMetrica(context.Context, string, string) (interface{}, error)
-	GetAllMetrics(context.Context) interface{}
+	GetAllMetrics(context.Context) (interface{}, error)
 }
 
 type MetricPrinter interface {
