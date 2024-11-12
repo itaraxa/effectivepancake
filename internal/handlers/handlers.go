@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	GAUGE                   = `gauge`
-	COUNTER                 = `counter`
-	MAX_QUERY_STRING_LENGTH = 256
+	gauge                = `gauge`
+	counter              = `counter`
+	maxQueryStringLength = 256
 )
 
 type logger interface {
@@ -101,9 +101,9 @@ func GetMetrica(s metricGetter, l logger) http.HandlerFunc {
 
 		res := ""
 		switch chi.URLParam(req, "type") {
-		case GAUGE:
+		case gauge:
 			res = fmt.Sprint(v.(float64))
-		case COUNTER:
+		case counter:
 			res = fmt.Sprint(v.(int64))
 		}
 		_, _ = w.Write([]byte(res))
@@ -163,10 +163,10 @@ func JSONGetMetrica(s metricGetter, l logger) http.HandlerFunc {
 
 		// Type switching
 		switch jm.GetMetricaType() {
-		case GAUGE:
+		case gauge:
 			t := valueFromStorage.(float64)
 			jm.Value = &t
-		case COUNTER:
+		case counter:
 			t := valueFromStorage.(int64)
 			jm.Delta = &t
 		}
@@ -210,9 +210,9 @@ func UpdateHandler(l logger, s metricUpdater) http.HandlerFunc {
 			l.Error("Only POST request allowed")
 			return
 		}
-		if len(queryString) > MAX_QUERY_STRING_LENGTH {
+		if len(queryString) > maxQueryStringLength {
 			http.Error(w, "Query sting too long", http.StatusBadRequest)
-			l.Error("query string too long", "query string", queryString[:MAX_QUERY_STRING_LENGTH], "query string length", len(queryString))
+			l.Error("query string too long", "query string", queryString[:maxQueryStringLength], "query string length", len(queryString))
 			return
 		}
 
@@ -301,12 +301,12 @@ func JSONUpdateHandler(l logger, s metricStorager) http.HandlerFunc {
 			l.Error("cannot update metrica", "data", buf.String(), "error", "any metric value is not set")
 			return
 		}
-		if jm.Delta == nil && jm.MType == COUNTER {
+		if jm.Delta == nil && jm.MType == counter {
 			http.Error(w, "the counter delta is not set", http.StatusBadRequest)
 			l.Error("cannot update metrica", "data", buf.String(), "error", "the counter delta is not set")
 			return
 		}
-		if jm.Value == nil && jm.MType == GAUGE {
+		if jm.Value == nil && jm.MType == gauge {
 			http.Error(w, "the gauge value is not set", http.StatusBadRequest)
 			l.Error("cannot update metrica", "data", buf.String(), "error", "the gauge value is not set")
 			return
@@ -339,10 +339,10 @@ func JSONUpdateHandler(l logger, s metricStorager) http.HandlerFunc {
 
 		resp := jm
 		switch jm.GetMetricaType() {
-		case GAUGE:
+		case gauge:
 			g, _ := value.(float64)
 			resp.Value = &g
-		case COUNTER:
+		case counter:
 			c, _ := value.(int64)
 			resp.Delta = &c
 		}

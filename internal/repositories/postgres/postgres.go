@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	GAUGE   = `gauge`
-	COUNTER = `counter`
+	gauge   = `gauge`
+	counter = `counter`
 )
 
 // type metricStorager interface {
@@ -197,7 +197,7 @@ Returns:
 */
 func (pr *PostgresRepository) GetMetrica(ctx context.Context, metricaType string, metricaName string) (interface{}, error) {
 	switch metricaType {
-	case GAUGE:
+	case gauge:
 		SQL := `SELECT metric_value FROM gauges WHERE metric_id = $1 ORDER BY metric_timestamp DESC LIMIT 1;`
 		row := pr.db.QueryRowContext(ctx, SQL, metricaName)
 		var gauge sql.NullFloat64
@@ -209,7 +209,7 @@ func (pr *PostgresRepository) GetMetrica(ctx context.Context, metricaType string
 			return nil, fmt.Errorf("empty gauge value in db")
 		}
 		return gauge.Float64, nil
-	case COUNTER:
+	case counter:
 		SQL := `SELECT metric_delta FROM counters WHERE metric_id = $1 ORDER BY metric_timestamp DESC LIMIT 1;`
 		row := pr.db.QueryRowContext(ctx, SQL, metricaName)
 		var delta sql.NullInt64
