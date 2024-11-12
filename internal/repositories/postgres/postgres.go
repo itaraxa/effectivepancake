@@ -118,8 +118,9 @@ Returns:
 	error
 */
 func (pr *PostgresRepository) UpdateGauge(ctx context.Context, metricName string, value float64) error {
-	_, err := pr.db.ExecContext(ctx, "INSERT INTO gauges(id, value, timestamp) VALUES (?, ?, ?)", metricName, value, time.Now())
+	_, err := pr.db.ExecContext(ctx, "INSERT INTO gauges (metric_id, metric_value) VALUES ($1, $2);", metricName, value)
 	if err != nil {
+		fmt.Println(err.Error())
 		return err
 	}
 	return nil
@@ -158,22 +159,23 @@ func (pr *PostgresRepository) AddCounter(ctx context.Context, metricName string,
 
 	// check delta-value in db
 	var currentDelta int64
-	err = tx.QueryRowContext(ctx, "SELECT delta FROM counters WHERE id = $1", metricName).Scan(&currentDelta)
+	err = tx.QueryRowContext(ctx, "SELECT metric_delta FROM counters WHERE metric_id = $1 ORDER BY metric_timestamp DESC LIMIT 1;", metricName).Scan(&currentDelta)
 	if err != nil {
 		// delta-value not in db
 		if err == sql.ErrNoRows {
-			_, err = tx.ExecContext(ctx, "INSERT INTO counters(id, delta, timestamp) VALUES ($1, $2, $3)", metricName, delta, time.Now())
+			_, err = tx.ExecContext(ctx, "INSERT INTO counters (metric_id, metric_delta, metric_timestamp) VALUES ($1, $2, $3);", metricName, delta, time.Now())
 			if err != nil {
 				return fmt.Errorf("cannot insert new record: %w", err)
 			}
-			// delta-value in db
 		} else {
-			newDelta := currentDelta + delta
-			_, err = tx.ExecContext(ctx, "INSERT INTO counters(id, delta, timestamp) VALUES ($1, $2, $3)", metricName, newDelta, time.Now())
-			if err != nil {
-				return fmt.Errorf("cannot update record: %w", err)
-			}
+			return fmt.Errorf("cannot check counter delta in DB: %w", err)
 		}
+	}
+	// delta-value in db
+	newDelta := currentDelta + delta
+	_, err = tx.ExecContext(ctx, "INSERT INTO counters (metric_id, metric_delta, metric_timestamp) VALUES ($1, $2, $3);", metricName, newDelta, time.Now())
+	if err != nil {
+		return fmt.Errorf("cannot update record: %w", err)
 	}
 
 	return nil
@@ -196,7 +198,8 @@ Returns:
 func (pr *PostgresRepository) GetMetrica(ctx context.Context, metricaType string, metricaName string) (interface{}, error) {
 	switch metricaType {
 	case GAUGE:
-		row := pr.db.QueryRowContext(ctx, "SELCET value FROM gauges WHERE id = $1 AND timestamp = (SELECT MAX(timestamp FROM gauges));", metricaName)
+		SQL := `SELECT metric_value FROM gauges WHERE metric_id = $1 ORDER BY metric_timestamp DESC LIMIT 1;`
+		row := pr.db.QueryRowContext(ctx, SQL, metricaName)
 		var gauge sql.NullFloat64
 		err := row.Scan(&gauge)
 		if err != nil {
@@ -207,9 +210,10 @@ func (pr *PostgresRepository) GetMetrica(ctx context.Context, metricaType string
 		}
 		return gauge.Float64, nil
 	case COUNTER:
-		row := pr.db.QueryRowContext(ctx, "SELCET value FROM counters WHERE id = $1 AND timestamp = (SELECT MAX(timestamp FROM counters));", metricaName)
+		SQL := `SELECT metric_delta FROM counters WHERE metric_id = $1 ORDER BY metric_timestamp DESC LIMIT 1;`
+		row := pr.db.QueryRowContext(ctx, SQL, metricaName)
 		var delta sql.NullInt64
-		err := row.Scan(delta)
+		err := row.Scan(&delta)
 		if err != nil {
 			return nil, fmt.Errorf("cannot get counter value from db: %w", err)
 		}
