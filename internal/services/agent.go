@@ -91,6 +91,28 @@ func sendMetricaToServerJSON(l logger, ms MetricsGetter, serverURL string, clien
 	return nil
 }
 
+func sendMetricaToServerBatch(l logger, ms MetricsGetter, serverURL string, client *http.Client) error {
+	jsonDataReq, err := json.Marshal(ms.GetData())
+	if err != nil {
+		return err
+	}
+	l.Debug("json data for send", "string representation", string(jsonDataReq))
+	resp, err := client.Post(fmt.Sprintf("http://%s/updates/", serverURL), "application/json", bytes.NewBuffer(jsonDataReq))
+	if err != nil {
+		return errors.ErrSendingMetricsToServer
+	}
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(resp.Body)
+	if err != nil {
+		l.Error("cannot read responce body")
+		return err
+	}
+	l.Info("json data from responce", "string representation", buf.String())
+	resp.Body.Close()
+
+	return nil
+}
+
 /*
 sendMetricaToServerJSONgzip send metrica data to server via http POST method. Data included into request body in compressed JSON.
 The response is checked for compression, and based on the result, it is decoded accordingly.
@@ -162,6 +184,64 @@ func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, c
 			l.Info("received a response with an error code", "status code", resp.StatusCode, "duration", time.Since(start))
 		}
 	}
+	return nil
+}
+
+func sendMetricaToServerBatchgzip(l logger, ms MetricsGetter, serverURL string, client *http.Client) error {
+	jsonDataReq, err := json.Marshal(ms.GetData())
+	if err != nil {
+		return err
+	}
+	jsonGzipDataReq, err := compress(jsonDataReq)
+	if err != nil {
+		l.Error("cannot compress data", "error", err.Error())
+	}
+	l.Debug("json data for send compressd", "string representation", string(jsonDataReq), "compress ratio", float64(len(jsonDataReq))/float64(len(jsonGzipDataReq)))
+
+	req, err := http.NewRequest(`POST`, fmt.Sprintf("http://%s/updates/", serverURL), bytes.NewBuffer(jsonGzipDataReq))
+	req.Header.Set("Accept-Encoding", "gzip")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Encoding", "gzip")
+	if err != nil {
+		l.Error("cannot create request", "error", err.Error())
+		return err
+	}
+
+	start := time.Now()
+	resp, err := client.Do(req)
+	if err != nil {
+		return errors.ErrSendingMetricsToServer
+	}
+	defer resp.Body.Close()
+
+	switch {
+	// get compressed data from server
+	case resp.StatusCode == http.StatusOK && resp.Header.Get("Content-Encoding") == `gzip`:
+		var buf bytes.Buffer
+		_, err = buf.ReadFrom(resp.Body)
+		if err != nil {
+			l.Error("cannot read responce body")
+			return errors.ErrGettingAnswerFromServer
+		}
+		data, err := decompress(buf.Bytes())
+		if err != nil {
+			l.Error("cannot decompress responce body")
+			return errors.ErrGettingAnswerFromServer
+		}
+		l.Info("json data from responce", "string representation", string(data), "duration", time.Since(start))
+	// get uncompressed data from server
+	case resp.StatusCode == http.StatusOK && resp.Header.Get("Content-Encoding") == "":
+		var buf bytes.Buffer
+		_, err = buf.ReadFrom(resp.Body)
+		if err != nil {
+			l.Error("cannot read responce body")
+			return errors.ErrGettingAnswerFromServer
+		}
+		l.Info("json data from responce", "string representation", buf.String(), "duration", time.Since(start))
+	default:
+		l.Info("received a response with an error code", "status code", resp.StatusCode, "duration", time.Since(start))
+	}
+
 	return nil
 }
 
@@ -393,25 +473,37 @@ REPORTING:
 		for len(dataChan) > 0 {
 			l.Info("Report counter", "Value", reportCounter)
 			switch {
-			case config.ReportMode == `json` && config.Compress == `gzip`:
+			case config.ReportMode == `json` && config.Compress == `gzip` && !config.Batch:
 				err := sendMetricaToServerJSONgzip(l, <-dataChan, config.AddressServer, client)
 				if err != nil {
 					l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
 					// Pause for next sending
 					time.Sleep(1 * time.Second)
 				}
-			case config.ReportMode == `json` && config.Compress == `none`:
+			case config.ReportMode == `json` && config.Compress == `none` && !config.Batch:
 				err := sendMetricaToServerJSON(l, <-dataChan, config.AddressServer, client)
 				if err != nil {
 					l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
 					// Pause for next sending
 					time.Sleep(1 * time.Second)
 				}
-			case config.ReportMode == `raw`:
+			case config.ReportMode == `raw` && !config.Batch:
 				err := sendMetricsToServerQueryStr(<-dataChan, config.AddressServer, client)
 				if err != nil {
 					l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
 					// Pause for next sending
+					time.Sleep(1 * time.Second)
+				}
+			case config.Batch && config.Compress == `none`:
+				err := sendMetricaToServerBatch(l, <-dataChan, config.AddressServer, client)
+				if err != nil {
+					l.Error("sending batch metrics to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
+					time.Sleep(1 * time.Second)
+				}
+			case config.Batch && config.Compress == `gzip`:
+				err := sendMetricaToServerBatchgzip(l, <-dataChan, config.AddressServer, client)
+				if err != nil {
+					l.Error("sending batch metrics to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
 					time.Sleep(1 * time.Second)
 				}
 			}
