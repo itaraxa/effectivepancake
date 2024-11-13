@@ -249,6 +249,10 @@ func (m *MemStorage) PingContext(ctx context.Context) error {
 }
 
 func (m *MemStorage) Close() error {
+	return m.Clear(context.TODO())
+}
+
+func (m *MemStorage) Clear(ctx context.Context) error {
 	m.mu.Unlock()
 	defer m.mu.Lock()
 	clear(m.Gauge)

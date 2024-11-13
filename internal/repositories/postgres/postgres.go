@@ -373,6 +373,29 @@ func (pr *PostgresRepository) GetAllMetrics(ctx context.Context) (interface{}, e
 	}{Gauges, Counters}, nil
 }
 
+/*
+Clear() truncates tables counters and gauges. Before restoring metrics data from file, usually.
+
+Args:
+
+	ctx context.Context
+
+Returns:
+
+	error
+*/
+func (pr *PostgresRepository) Clear(ctx context.Context) error {
+	_, err := pr.db.ExecContext(ctx, "TRUNCATE TABLE gauges;")
+	if err != nil {
+		return fmt.Errorf("truncate table 'guauges': %w", err)
+	}
+	_, err = pr.db.ExecContext(ctx, "TRUNCATE TABLE counters;")
+	if err != nil {
+		return fmt.Errorf("truncate table 'counters': %w", err)
+	}
+	return nil
+}
+
 func (pr *PostgresRepository) String(ctx context.Context) string {
 	s := ""
 	metrics, err := pr.GetAllMetrics(ctx)

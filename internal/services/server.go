@@ -244,7 +244,7 @@ func LoadMetrics(mu MetricUpdater, src io.Reader) (time.Time, error) {
 			if err != nil {
 				return time.UnixMilli(0), fmt.Errorf("updating gauge %s error: %v", ID, err.Error())
 			}
-			fmt.Printf("Update gauge from file: %s %g", ID, value.(float64))
+			fmt.Printf("Update gauge from file: %s %g\n\r", ID, value.(float64))
 		}
 	}
 	if counter, ok := metrics.(map[string]interface{})["counters"]; ok {
@@ -255,7 +255,7 @@ func LoadMetrics(mu MetricUpdater, src io.Reader) (time.Time, error) {
 			if err != nil {
 				return time.UnixMilli(0), fmt.Errorf("updating counter %s error: %v", ID, err.Error())
 			}
-			fmt.Printf("Add counter from file: %s %d", ID, int64(delta.(float64)))
+			fmt.Printf("Add counter from file: %s %d\n\r", ID, int64(delta.(float64)))
 		}
 	}
 

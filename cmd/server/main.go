@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -88,9 +89,17 @@ func (sa *ServerApp) Run() {
 	}()
 
 	// Restoring metric data from the file
+	// если воостанавливаем метрики из файла, то предварительно очищаем хранилище
 	if sa.config.Restore {
+		sa.logger.Info("clear storage")
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		err := sa.storage.Clear(ctx)
+		if err != nil {
+			sa.logger.Error("cleaning storage before metrics loading from file", "error", err.Error())
+		}
 		sa.logger.Info("try to load metrics from file", "filename", sa.config.FileStoragePath)
-		err := services.LoadMetricsFromFile(sa.logger, sa.storage, sa.config.FileStoragePath)
+		err = services.LoadMetricsFromFile(sa.logger, sa.storage, sa.config.FileStoragePath)
 		if err != nil {
 			sa.logger.Error("metrics wasn't loaded from file", "error", err.Error(), "filename", sa.config.FileStoragePath)
 		} else {
