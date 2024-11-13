@@ -253,8 +253,8 @@ func (m *MemStorage) Close() error {
 }
 
 func (m *MemStorage) Clear(ctx context.Context) error {
-	m.mu.Unlock()
-	defer m.mu.Lock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	clear(m.Gauge)
 	clear(m.Counter)
 	return nil
