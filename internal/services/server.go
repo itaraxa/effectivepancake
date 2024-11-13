@@ -295,27 +295,45 @@ func LoadMetricsFromFile(l logger, mu MetricUpdater, fileName string) error {
 }
 
 func JSONUpdateBatchMetrica(l logger, jmqs []JSONMetricaQuerier, mbu MetricBatchUpdater) error {
-	gaugeBath := make(map[string]*float64)
-	counterBatch := make(map[string]*int64)
+	gaugeBatch := []struct {
+		MetricName  string
+		MetricValue *float64
+	}{}
+
+	counterBatch := []struct {
+		MetricName  string
+		MetricDelta *int64
+	}{}
+
+	// gaugeBath := make(map[string]*float64)
+	// counterBatch := make(map[string]*int64)
 	for _, jmq := range jmqs {
 		switch jmq.GetMetricaType() {
 		case gauge:
 			name := jmq.GetMetricaName()
 			value := jmq.GetMetricaValue()
-			gaugeBath[name] = value
+			gaugeBatch = append(gaugeBatch, struct {
+				MetricName  string
+				MetricValue *float64
+			}{MetricName: name, MetricValue: value})
+			// gaugeBath[name] = value
 
 		case counter:
 			name := jmq.GetMetricaName()
 			delta := jmq.GetMetricaCounter()
-			counterBatch[name] = delta
+			counterBatch = append(counterBatch, struct {
+				MetricName  string
+				MetricDelta *int64
+			}{MetricName: name, MetricDelta: delta})
+			// counterBatch[name] = delta
 		}
 	}
-	l.Debug("get batch for load", "gauges", len(gaugeBath), "counters", len(counterBatch))
+	l.Debug("get batch for load", "gauges", len(gaugeBatch), "counters", len(counterBatch))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	err := mbu.UpdateBatchGauge(ctx, gaugeBath)
+	err := mbu.UpdateBatchGauge(ctx, gaugeBatch)
 	if err != nil {
 		l.Error("updating gauge batch", "error", err.Error())
 		return err

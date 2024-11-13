@@ -36,9 +36,12 @@ func (m *MemStorage) UpdateGauge(ctx context.Context, metricName string, value f
 	return nil
 }
 
-func (m *MemStorage) UpdateBatchGauge(ctx context.Context, metrics map[string]*float64) error {
-	for metricName, metricValue := range metrics {
-		m.Gauge[metricName] = *metricValue
+func (m *MemStorage) UpdateBatchGauge(ctx context.Context, metrics []struct {
+	MetricName  string
+	MetricValue *float64
+}) error {
+	for _, metric := range metrics {
+		m.Gauge[metric.MetricName] = *metric.MetricValue
 	}
 	return nil
 }
@@ -64,12 +67,15 @@ func (m *MemStorage) AddCounter(ctx context.Context, metricName string, delta in
 	return nil
 }
 
-func (m *MemStorage) AddBatchCounter(ctx context.Context, metrics map[string]*int64) error {
-	for metricName, metricDelta := range metrics {
-		if currentDelta, ok := m.Counter[metricName]; ok {
-			m.Counter[metricName] = currentDelta + *metricDelta
+func (m *MemStorage) AddBatchCounter(ctx context.Context, metrics []struct {
+	MetricName  string
+	MetricDelta *int64
+}) error {
+	for _, metric := range metrics {
+		if currentDelta, ok := m.Counter[metric.MetricName]; ok {
+			m.Counter[metric.MetricName] = currentDelta + *metric.MetricDelta
 		} else {
-			m.Counter[metricName] = *metricDelta
+			m.Counter[metric.MetricName] = *metric.MetricDelta
 		}
 	}
 	return nil

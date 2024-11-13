@@ -44,8 +44,14 @@ type metricUpdater interface {
 }
 
 type metricBatchUpdater interface {
-	UpdateBatchGauge(context.Context, map[string]*float64) error
-	AddBatchCounter(context.Context, map[string]*int64) error
+	UpdateBatchGauge(context.Context, []struct {
+		MetricName  string
+		MetricValue *float64
+	}) error
+	AddBatchCounter(context.Context, []struct {
+		MetricName  string
+		MetricDelta *int64
+	}) error
 }
 
 type metricPrinter interface {
@@ -388,6 +394,7 @@ func JSONUpdateBatchHandler(l logger, s metricStorager) http.HandlerFunc {
 		var jmqs []services.JSONMetricaQuerier
 		for _, jmq := range jms {
 			jmqs = append(jmqs, jmq)
+			fmt.Printf("%s (%s) = %p | %p\n\r", jmq.ID, jmq.MType, jmq.Value, jmq.Delta)
 		}
 
 		// updating metrica in storage

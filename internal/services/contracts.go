@@ -23,8 +23,14 @@ type MetricUpdater interface {
 }
 
 type MetricBatchUpdater interface {
-	UpdateBatchGauge(context.Context, map[string]*float64) error
-	AddBatchCounter(context.Context, map[string]*int64) error
+	UpdateBatchGauge(context.Context, []struct {
+		MetricName  string
+		MetricValue *float64
+	}) error
+	AddBatchCounter(context.Context, []struct {
+		MetricName  string
+		MetricDelta *int64
+	}) error
 }
 
 type MetricGetter interface {
