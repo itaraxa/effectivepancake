@@ -255,7 +255,7 @@ func LoadMetrics(mu MetricUpdater, src io.Reader) (time.Time, error) {
 			if err != nil {
 				return time.UnixMilli(0), fmt.Errorf("updating counter %s error: %v", ID, err.Error())
 			}
-			fmt.Printf("Add counter from file: %s %d", ID, delta.(int64))
+			fmt.Printf("Add counter from file: %s %d", ID, int64(delta.(float64)))
 		}
 	}
 
