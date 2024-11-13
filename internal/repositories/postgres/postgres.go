@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -41,6 +42,7 @@ PostgresRepository is the struct for wrapping PostgreSQL storage
 */
 type PostgresRepository struct {
 	db *sql.DB
+	mu sync.Mutex
 }
 
 /*
@@ -118,6 +120,9 @@ Returns:
 	error
 */
 func (pr *PostgresRepository) UpdateGauge(ctx context.Context, metricName string, value float64) error {
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
+
 	_, err := pr.db.ExecContext(ctx, "INSERT INTO gauges (metric_id, metric_value) VALUES ($1, $2);", metricName, value)
 	if err != nil {
 		fmt.Println(err.Error())
@@ -127,6 +132,9 @@ func (pr *PostgresRepository) UpdateGauge(ctx context.Context, metricName string
 }
 
 func (pr *PostgresRepository) UpdateBatchGauge(ctx context.Context, metrics map[string]*float64) error {
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
+
 	// init transacion
 	tx, err := pr.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -169,6 +177,9 @@ Returns:
 	error
 */
 func (pr *PostgresRepository) AddCounter(ctx context.Context, metricName string, delta int64) error {
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
+
 	// init transaction
 	tx, err := pr.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -212,6 +223,9 @@ func (pr *PostgresRepository) AddCounter(ctx context.Context, metricName string,
 }
 
 func (pr *PostgresRepository) AddBatchCounter(ctx context.Context, metrics map[string]*int64) error {
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
+
 	// init transaction
 	tx, err := pr.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -270,7 +284,10 @@ Returns:
 	error: nil or error, if value cannot be getted
 */
 func (pr *PostgresRepository) GetMetrica(ctx context.Context, metricaType string, metricaName string) (interface{}, error) {
-	fmt.Println(">> data from storage:\n\r", pr.String(ctx))
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
+
+	// fmt.Println(">> data from storage:\n\r", pr.String(ctx))
 	switch metricaType {
 	case gauge:
 		SQL := `SELECT metric_value FROM gauges WHERE metric_id = $1 ORDER BY metric_timestamp DESC LIMIT 1;`
@@ -314,6 +331,9 @@ Returns:
 	error
 */
 func (pr *PostgresRepository) GetAllMetrics(ctx context.Context) (interface{}, error) {
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
+
 	var name sql.NullString
 	var value sql.NullFloat64
 	var delta sql.NullInt64
@@ -385,6 +405,9 @@ Returns:
 	error
 */
 func (pr *PostgresRepository) Clear(ctx context.Context) error {
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
+
 	_, err := pr.db.ExecContext(ctx, "TRUNCATE TABLE gauges;")
 	if err != nil {
 		return fmt.Errorf("truncate table 'guauges': %w", err)
