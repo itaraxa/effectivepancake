@@ -29,7 +29,7 @@ Returns:
 
 	error: nil or error, encountered during sending data
 */
-func sendMetricsToServerQueryStr(ms MetricsGetter, serverURL string, client *http.Client) error {
+func sendMetricsToServerQueryStr(l logger, ms MetricsGetter, serverURL string, client *http.Client) error {
 	for _, m := range ms.GetData() {
 		queryString := ""
 		if m.MType == "gauge" {
@@ -37,8 +37,16 @@ func sendMetricsToServerQueryStr(ms MetricsGetter, serverURL string, client *htt
 		} else if m.MType == "counter" {
 			queryString = fmt.Sprintf("http://%s/update/%s/%s/%d", serverURL, m.MType, m.ID, *m.Delta)
 		}
-		res, err := client.Post(queryString, "text/plain", nil)
+		req, err := http.NewRequest(`POST`, queryString, nil)
+		req.Header.Set("Content-Type", "text/plain")
 		if err != nil {
+			l.Error("cannot create request", "error", err.Error())
+			return err
+		}
+		// res, err := client.Post(queryString, "text/plain", nil)
+		res, err := retryDo(l, client, req)
+		if err != nil {
+			l.Error("cannot send metrics to server")
 			return errors.ErrSendingMetricsToServer
 		}
 		// Reading response body to the end to Close body and release the TCP-connection
@@ -74,8 +82,14 @@ func sendMetricaToServerJSON(l logger, ms MetricsGetter, serverURL string, clien
 		}
 
 		l.Info("json data for send", "string representation", string(jsonDataReq))
-
-		resp, err := client.Post(fmt.Sprintf("http://%s/update/", serverURL), "application/json", bytes.NewBuffer(jsonDataReq))
+		req, err := http.NewRequest(`POST`, fmt.Sprintf("http://%s/update/", serverURL), bytes.NewBuffer(jsonDataReq))
+		req.Header.Set("Content-Type", "application/json")
+		if err != nil {
+			l.Error("cannot create request", "error", err.Error())
+			return err
+		}
+		// resp, err := client.Post(fmt.Sprintf("http://%s/update/", serverURL), "application/json", bytes.NewBuffer(jsonDataReq))
+		resp, err := retryDo(l, client, req)
 		if err != nil {
 			return errors.ErrSendingMetricsToServer
 		}
@@ -97,7 +111,14 @@ func sendMetricaToServerBatch(l logger, ms MetricsGetter, serverURL string, clie
 		return err
 	}
 	l.Debug("json data for send", "string representation", string(jsonDataReq))
-	resp, err := client.Post(fmt.Sprintf("http://%s/updates/", serverURL), "application/json", bytes.NewBuffer(jsonDataReq))
+	req, err := http.NewRequest(`POST`, fmt.Sprintf("http://%s/updates/", serverURL), bytes.NewBuffer(jsonDataReq))
+	req.Header.Set("Content-Type", "application/json")
+	if err != nil {
+		l.Error("cannot create request", "error", err.Error())
+		return err
+	}
+	// resp, err := client.Post(fmt.Sprintf("http://%s/updates/", serverURL), "application/json", bytes.NewBuffer(jsonDataReq))
+	resp, err := retryDo(l, client, req)
 	if err != nil {
 		return errors.ErrSendingMetricsToServer
 	}
@@ -150,7 +171,8 @@ func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, c
 		}
 
 		start := time.Now()
-		resp, err := client.Do(req)
+		// resp, err := client.Do(req)
+		resp, err := retryDo(l, client, req)
 		if err != nil {
 			return errors.ErrSendingMetricsToServer
 		}
@@ -208,8 +230,10 @@ func sendMetricaToServerBatchgzip(l logger, ms MetricsGetter, serverURL string, 
 	}
 
 	start := time.Now()
-	resp, err := client.Do(req)
+	resp, err := retryDo(l, client, req)
+	// resp, err := client.Do(req)
 	if err != nil {
+		// return errors.NewRetryError(err, tryNumber)
 		return errors.ErrSendingMetricsToServer
 	}
 	defer resp.Body.Close()
@@ -243,6 +267,41 @@ func sendMetricaToServerBatchgzip(l logger, ms MetricsGetter, serverURL string, 
 	}
 
 	return nil
+}
+
+func retryDo(l logger, client *http.Client, req *http.Request) (*http.Response, error) {
+	// try 1
+	resp, err := client.Do(req)
+	if err == nil {
+		return resp, nil
+	}
+	l.Error("error sending metric to server", "try", 1, "timeout", time.Second*1)
+	time.Sleep(1 * time.Second)
+
+	// try 2
+	resp, err = client.Do(req)
+	if err == nil {
+		return resp, nil
+	}
+	l.Error("error sending metric to server", "try", 2, "timeout", time.Second*3)
+	time.Sleep(3 * time.Second)
+
+	// try 3
+	resp, err = client.Do(req)
+	if err == nil {
+		return resp, nil
+	}
+	l.Error("error sending metric to server", "try", 3, "timeout", time.Second*5)
+	time.Sleep(5 * time.Second)
+
+	// last try
+	resp, err = client.Do(req)
+	if err == nil {
+		return resp, nil
+	}
+	l.Error("error sending metric to server")
+
+	return nil, err
 }
 
 /*
@@ -462,50 +521,61 @@ Returns:
 
 	None
 */
-func ReportMetrics(wg *sync.WaitGroup, controlChan chan bool, dataChan chan MetricsAddGetter, l logger, config *config.AgentConfig, client *http.Client) {
+func ReportMetrics(wg *sync.WaitGroup, controlChan chan bool, dataChan chan MetricsAddGetter, l logger, conf *config.AgentConfig, client *http.Client) {
 	defer wg.Done()
 	var reportCounter uint64 = 0
 REPORTING:
 	for {
 		controlChan <- false
 
-		time.Sleep(config.ReportInterval)
+		time.Sleep(conf.ReportInterval)
 		for len(dataChan) > 0 {
 			l.Info("Report counter", "Value", reportCounter)
 			switch {
-			case config.ReportMode == `json` && config.Compress == `gzip` && !config.Batch:
-				err := sendMetricaToServerJSONgzip(l, <-dataChan, config.AddressServer, client)
-				if err != nil {
-					l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
-					// Pause for next sending
-					time.Sleep(1 * time.Second)
-				}
-			case config.ReportMode == `json` && config.Compress == `none` && !config.Batch:
-				err := sendMetricaToServerJSON(l, <-dataChan, config.AddressServer, client)
-				if err != nil {
-					l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
-					// Pause for next sending
-					time.Sleep(1 * time.Second)
-				}
-			case config.ReportMode == `raw` && !config.Batch:
-				err := sendMetricsToServerQueryStr(<-dataChan, config.AddressServer, client)
-				if err != nil {
-					l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
-					// Pause for next sending
-					time.Sleep(1 * time.Second)
-				}
-			case config.Batch && config.Compress == `none`:
-				err := sendMetricaToServerBatch(l, <-dataChan, config.AddressServer, client)
-				if err != nil {
-					l.Error("sending batch metrics to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
-					time.Sleep(1 * time.Second)
-				}
-			case config.Batch && config.Compress == `gzip`:
-				err := sendMetricaToServerBatchgzip(l, <-dataChan, config.AddressServer, client)
-				if err != nil {
-					l.Error("sending batch metrics to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
-					time.Sleep(1 * time.Second)
-				}
+			case conf.ReportMode == `json` && conf.Compress == `gzip` && !conf.Batch:
+				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
+					_ = sendMetricaToServerJSONgzip(l, <-dataChan, config.AddressServer, client)
+				}(l, dataChan, conf, client)
+				// if err != nil {
+				// 	l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
+				// 	// Pause for next sending
+				// 	time.Sleep(1 * time.Second)
+				// }
+			case conf.ReportMode == `json` && conf.Compress == `none` && !conf.Batch:
+				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
+					_ = sendMetricaToServerJSON(l, <-dataChan, config.AddressServer, client)
+				}(l, dataChan, conf, client)
+				// if err != nil {
+				// l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
+				// // Pause for next sending
+				// time.Sleep(1 * time.Second)
+				// }
+			case conf.ReportMode == `raw` && !conf.Batch:
+				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
+					_ = sendMetricsToServerQueryStr(l, <-dataChan, config.AddressServer, client)
+				}(l, dataChan, conf, client)
+				// if err != nil {
+				// 	l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
+				// 	// Pause for next sending
+				// 	time.Sleep(1 * time.Second)
+				// }
+			case conf.Batch && conf.Compress == `none`:
+				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
+					_ = sendMetricaToServerBatch(l, <-dataChan, config.AddressServer, client)
+				}(l, dataChan, conf, client)
+				// if err != nil {
+				// 	l.Error("sending batch metrics to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
+				// 	time.Sleep(1 * time.Second)
+				// }
+			case conf.Batch && conf.Compress == `gzip`:
+				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
+					_ = sendMetricaToServerBatchgzip(l, <-dataChan, config.AddressServer, client)
+				}(l, dataChan, conf, client)
+				// err := sendMetricaToServerBatchgzip(l, <-dataChan, config.AddressServer, client)
+				// if err != nil {
+				// 	l.Error("sending batch metrics to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
+				// 	time.Sleep(1 * time.Second)
+				// }
 			}
 		}
 		reportCounter++
