@@ -270,6 +270,7 @@ Returns:
 	error: nil or error, if value cannot be getted
 */
 func (pr *PostgresRepository) GetMetrica(ctx context.Context, metricaType string, metricaName string) (interface{}, error) {
+	fmt.Println(">> data from storage:\n\r", pr.String(ctx))
 	switch metricaType {
 	case gauge:
 		SQL := `SELECT metric_value FROM gauges WHERE metric_id = $1 ORDER BY metric_timestamp DESC LIMIT 1;`
@@ -388,15 +389,15 @@ func (pr *PostgresRepository) String(ctx context.Context) string {
 		Counters map[string]int64   `json:"counters"`
 	}).Counters
 
-	s += "Gauges:"
+	s += ">> Gauges:\n\r"
 	for metricName, metricValue := range gauges {
-		s += fmt.Sprintf("%s: %g\n\r", metricName, metricValue)
+		s += fmt.Sprintf(">> %s: %g\n\r", metricName, metricValue)
 	}
-	s += "Counters:"
+	s += ">> Counters:\n\r"
 	for metricName, metricDelta := range counters {
-		s += fmt.Sprintf("%s: %d\n\r", metricName, metricDelta)
+		s += fmt.Sprintf(">> %s: %d\n\r", metricName, metricDelta)
 	}
-	return ""
+	return s
 }
 
 /*
