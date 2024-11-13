@@ -357,8 +357,9 @@ func JSONUpdateBatchMetrica(l logger, jmqs []JSONMetricaQuerier, mbu MetricBatch
 func retryableError(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
+		fmt.Println(pgErr.Code)
 		switch pgErr.Code {
-		case pgerrcode.SerializationFailure, pgerrcode.DeadlockDetected, pgerrcode.LockNotAvailable:
+		case pgerrcode.DeadlockDetected, pgerrcode.LockNotAvailable, pgerrcode.ConnectionException, pgerrcode.ConnectionFailure, pgerrcode.SQLClientUnableToEstablishSQLConnection:
 			return true
 		}
 	}
