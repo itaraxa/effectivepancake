@@ -1,6 +1,7 @@
 package memstorage
 
 import (
+	"context"
 	"testing"
 )
 
@@ -68,7 +69,7 @@ func TestMemStorage_UpdateGauge(t *testing.T) {
 				Gauge:   tt.fields.Gauge,
 				Counter: tt.fields.Counter,
 			}
-			if err := m.UpdateGauge(tt.args.metricName, tt.args.value); (err != nil) != tt.wantErr {
+			if err := m.UpdateGauge(context.TODO(), tt.args.metricName, tt.args.value); (err != nil) != tt.wantErr {
 				t.Errorf("MemStorage.UpdateGauge() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -148,7 +149,7 @@ func TestMemStorage_AddCounter(t *testing.T) {
 				Gauge:   tt.fields.Gauge,
 				Counter: tt.fields.Counter,
 			}
-			if err := m.AddCounter(tt.args.metricName, tt.args.value); (err != nil) != tt.wantErr {
+			if err := m.AddCounter(context.TODO(), tt.args.metricName, tt.args.value); (err != nil) != tt.wantErr {
 				t.Errorf("MemStorage.AddCounter() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -212,7 +213,7 @@ func TestMemStorage_GetMetrica(t *testing.T) {
 				Gauge:   tt.fields.Gauge,
 				Counter: tt.fields.Counter,
 			}
-			got, err := m.GetMetrica(tt.args.metricaType, tt.args.metricaName)
+			got, err := m.GetMetrica(context.TODO(), tt.args.metricaType, tt.args.metricaName)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("MemStorage.GetMetrica() error = %v, wantErr %v", err, tt.wantErr)
 				return

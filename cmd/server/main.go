@@ -21,7 +21,7 @@ import (
 // Structure for embedding dependencies into the server app
 type ServerApp struct {
 	logger  logger.Logger
-	storage *memstorage.MemStorage
+	storage services.MetricStorager
 	router  *chi.Mux
 	config  *config.ServerConfig
 }
@@ -40,7 +40,7 @@ Returns:
 
 	*ServerApp: pointer to the ServerApp instance
 */
-func NewServerApp(logger logger.Logger, storage *memstorage.MemStorage, router *chi.Mux, config *config.ServerConfig) *ServerApp {
+func NewServerApp(logger logger.Logger, storage services.MetricStorager, router *chi.Mux, config *config.ServerConfig) *ServerApp {
 	return &ServerApp{
 		logger:  logger,
 		storage: storage,
@@ -66,6 +66,7 @@ func (sa *ServerApp) Run() {
 		"Restore", sa.config.Restore,
 		"Storing metrica file", sa.config.FileStoragePath,
 		"Store interval", time.Duration(sa.config.StoreInterval)*time.Second,
+		"Database DSN", sa.config.DatabaseDSN,
 	)
 	defer sa.logger.Info("server stopped")
 
@@ -110,7 +111,6 @@ func (sa *ServerApp) Run() {
 
 	// Add middlewares
 	sa.router.Use(middlewares.LoggerMiddleware(sa.logger))
-	// sa.router.Use(middleware.Compress(5, "application/json"))
 	sa.router.Use(middlewares.CompressResponceMiddleware(sa.logger))
 	sa.router.Use(middlewares.DecompressRequestMiddleware(sa.logger))
 	sa.router.Use(middlewares.StatMiddleware(sa.logger, 10))
@@ -126,11 +126,13 @@ func (sa *ServerApp) Run() {
 	}
 
 	// Add routes
-	sa.router.Get(`/`, handlers.GetAllCurrentMetrics(sa.storage, sa.logger))
+	sa.router.Get(`/ping`, handlers.Ping(sa.logger, sa.config.DatabaseDSN))
+	sa.router.Get(`/ping/`, handlers.Ping(sa.logger, sa.config.DatabaseDSN))
 	sa.router.Get(`/value/{type}/{name}`, handlers.GetMetrica(sa.storage, sa.logger))
 	sa.router.Post(`/value/`, handlers.JSONGetMetrica(sa.storage, sa.logger))
 	sa.router.Post(`/update/`, handlers.JSONUpdateHandler(sa.logger, sa.storage))
 	sa.router.Post(`/update/*`, handlers.UpdateHandler(sa.logger, sa.storage))
+	sa.router.Get(`/`, handlers.GetAllCurrentMetrics(sa.storage, sa.logger))
 
 	// Start router
 	sa.logger.Info("start router")
@@ -165,10 +167,8 @@ func main() {
 	}
 	defer logger.Sync()
 
-	ms := memstorage.NewMemStorage()
-
 	r := chi.NewRouter()
-
-	app := NewServerApp(logger, ms, r, serverConf)
+	s := memstorage.NewMemStorage()
+	app := NewServerApp(logger, s, r, serverConf)
 	app.Run()
 }

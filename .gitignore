@@ -25,10 +25,13 @@ vendor/
 .vscode
 
 # Tests utility from Yandex Practicum repo
-test/devopstest-darwin-arm64
-test/metricstest-darwin-arm64
-test/*.sh
+test/
 metrictest
 
 metrics.dat
 temp*
+
+task/
+
+# DB files
+pgdata/

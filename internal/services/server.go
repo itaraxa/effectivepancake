@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -65,7 +66,7 @@ func UpdateMetrica(q Querier, s MetricUpdater) error {
 		if err != nil {
 			return errors.ErrParseGauge
 		}
-		err = s.UpdateGauge(q.GetMetricName(), g)
+		err = s.UpdateGauge(context.TODO(), q.GetMetricName(), g)
 		if err != nil {
 			return errors.ErrUpdateGauge
 		}
@@ -74,7 +75,7 @@ func UpdateMetrica(q Querier, s MetricUpdater) error {
 		if err != nil {
 			return errors.ErrParseCounter
 		}
-		err = s.AddCounter(q.GetMetricName(), int64(c))
+		err = s.AddCounter(context.TODO(), q.GetMetricName(), int64(c))
 		if err != nil {
 			return errors.ErrAddCounter
 		}
@@ -99,12 +100,12 @@ Returns:
 func JSONUpdateMetrica(jmq JSONMetricaQuerier, mu MetricUpdater) error {
 	switch jmq.GetMetricaType() {
 	case "gauge":
-		err := mu.UpdateGauge(jmq.GetMetricaName(), *jmq.GetMetricaValue())
+		err := mu.UpdateGauge(context.TODO(), jmq.GetMetricaName(), *jmq.GetMetricaValue())
 		if err != nil {
 			return errors.ErrUpdateGauge
 		}
 	case "counter":
-		err := mu.AddCounter(jmq.GetMetricaName(), *jmq.GetMetricaCounter())
+		err := mu.AddCounter(context.TODO(), jmq.GetMetricaName(), *jmq.GetMetricaCounter())
 		if err != nil {
 			return errors.ErrAddCounter
 		}
@@ -127,7 +128,7 @@ Returns:
 	error: nil or error, if occured
 */
 func WriteMetrics(mg MetricGetter, dst io.Writer) error {
-	data, err := json.MarshalIndent(mg.GetAllMetrics(), "\t", "\t")
+	data, err := json.MarshalIndent(mg.GetAllMetrics(context.TODO()), "\t", "\t")
 	if err != nil {
 		return err
 	}
@@ -153,7 +154,7 @@ Returns:
 func WriteMetricsWithTimestamp(mg MetricGetter, dst io.Writer) error {
 	blob := make(map[string]interface{})
 	blob["timestamp"] = time.Now()
-	blob["metrics"] = mg.GetAllMetrics()
+	blob["metrics"] = mg.GetAllMetrics(context.TODO())
 
 	data, err := json.MarshalIndent(blob, "\t", "\t")
 	if err != nil {
@@ -230,7 +231,7 @@ func LoadMetrics(mu MetricUpdater, src io.Reader) (time.Time, error) {
 
 	if gauges, ok := metrics.(map[string]interface{})["gauges"]; ok {
 		for ID, value := range gauges.(map[string]interface{}) {
-			err := mu.UpdateGauge(ID, value.(float64))
+			err := mu.UpdateGauge(context.TODO(), ID, value.(float64))
 			if err != nil {
 				return time.UnixMilli(0), fmt.Errorf("updating gauge %s error: %v", ID, err.Error())
 			}
@@ -240,7 +241,7 @@ func LoadMetrics(mu MetricUpdater, src io.Reader) (time.Time, error) {
 		for ID, delta := range counter.(map[string]interface{}) {
 			// Unmarshall from interface{} to float64 and convert to int64
 			// because json.Unmarshall numbers into float64
-			err := mu.AddCounter(ID, int64(delta.(float64)))
+			err := mu.AddCounter(context.TODO(), ID, int64(delta.(float64)))
 			if err != nil {
 				return time.UnixMilli(0), fmt.Errorf("updating counter %s error: %v", ID, err.Error())
 			}

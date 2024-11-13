@@ -26,7 +26,6 @@ func TestParseQueryString(t *testing.T) {
 			name: `Update gauge`,
 			args: args{raw: `/update/gauge/test1/3.14`},
 			wantQ: &models.Query{
-				// raw:            `/update/gauge/test1/3.14`,
 				MetricType:     `gauge`,
 				MetricName:     `test1`,
 				MetricRawValue: `3.14`,
@@ -37,7 +36,6 @@ func TestParseQueryString(t *testing.T) {
 			name: `Update counter`,
 			args: args{raw: `/update/counter/test2/3`},
 			wantQ: &models.Query{
-				// raw:            `/update/gauge/test2/3`,
 				MetricType:     `counter`,
 				MetricName:     `test2`,
 				MetricRawValue: `3`,
