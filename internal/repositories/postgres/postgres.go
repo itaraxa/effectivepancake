@@ -30,12 +30,6 @@ type MetricPrinter interface {
 	HTML() string
 }
 
-// type dbStorager interface {
-// 	PingContext(context.Context) error
-// 	Close() error
-// 	PrepareTablesContext(context.Context) error
-// }
-
 type PostgresRepository struct {
 	db *sql.DB
 }
