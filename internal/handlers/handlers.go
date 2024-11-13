@@ -392,6 +392,7 @@ func JSONUpdateBatchHandler(l logger, s metricStorager) http.HandlerFunc {
 
 		// updating metrica in storage
 		err = services.JSONUpdateBatchMetrica(l, jmqs, s)
+		l.Info("request batch update", "body", fmt.Sprint(jmqs))
 		// if err != nil && (errors.Is(err, myErrors.ErrParseGauge) || errors.Is(err, myErrors.ErrParseCounter)) {
 		// 	http.Error(w, err.Error(), http.StatusBadRequest)
 		// 	l.Error("the value is not of the specified type", "json query", jms.String(), "error", err.Error())
