@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,8 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/itaraxa/effectivepancake/internal/errors"
+	myErrors "github.com/itaraxa/effectivepancake/internal/errors"
 	"github.com/itaraxa/effectivepancake/internal/models"
+
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 const (
@@ -34,7 +38,7 @@ Returns:
 func ParseQueryString(raw string) (q Querier, err error) {
 	queryString := raw[1:]
 	if len(strings.Split(queryString, `/`)) != 4 {
-		return nil, errors.ErrBadRawQuery
+		return nil, myErrors.ErrBadRawQuery
 	}
 	q = models.NewQuery()
 	err = q.SetMetricaType(queryString)
@@ -69,23 +73,25 @@ func UpdateMetrica(q Querier, s MetricUpdater) error {
 	case gauge:
 		g, err := strconv.ParseFloat(q.GetMetricaRawValue(), 64)
 		if err != nil {
-			return errors.ErrParseGauge
+			return myErrors.ErrParseGauge
 		}
-		err = s.UpdateGauge(context.TODO(), q.GetMetricName(), g)
+
+		err = retry(func() error { return s.UpdateGauge(context.TODO(), q.GetMetricName(), g) })
+
 		if err != nil {
-			return errors.ErrUpdateGauge
+			return myErrors.ErrUpdateGauge
 		}
 	case counter:
 		c, err := strconv.Atoi(q.GetMetricaRawValue())
 		if err != nil {
-			return errors.ErrParseCounter
+			return myErrors.ErrParseCounter
 		}
-		err = s.AddCounter(context.TODO(), q.GetMetricName(), int64(c))
+		err = retry(func() error { return s.AddCounter(context.TODO(), q.GetMetricName(), int64(c)) })
 		if err != nil {
-			return errors.ErrAddCounter
+			return myErrors.ErrAddCounter
 		}
 	default:
-		return errors.ErrBadType
+		return myErrors.ErrBadType
 	}
 	return nil
 }
@@ -105,17 +111,17 @@ Returns:
 func JSONUpdateMetrica(jmq JSONMetricaQuerier, mu MetricUpdater) error {
 	switch jmq.GetMetricaType() {
 	case gauge:
-		err := mu.UpdateGauge(context.TODO(), jmq.GetMetricaName(), *jmq.GetMetricaValue())
+		err := retry(func() error { return mu.UpdateGauge(context.TODO(), jmq.GetMetricaName(), *jmq.GetMetricaValue()) })
 		if err != nil {
-			return errors.ErrUpdateGauge
+			return myErrors.ErrUpdateGauge
 		}
 	case counter:
-		err := mu.AddCounter(context.TODO(), jmq.GetMetricaName(), *jmq.GetMetricaCounter())
+		err := retry(func() error { return mu.AddCounter(context.TODO(), jmq.GetMetricaName(), *jmq.GetMetricaCounter()) })
 		if err != nil {
-			return errors.ErrAddCounter
+			return myErrors.ErrAddCounter
 		}
 	default:
-		return errors.ErrBadType
+		return myErrors.ErrBadType
 	}
 	return nil
 }
@@ -240,7 +246,7 @@ func LoadMetrics(mu MetricUpdater, src io.Reader) (time.Time, error) {
 
 	if gauges, ok := metrics.(map[string]interface{})["gauges"]; ok {
 		for ID, value := range gauges.(map[string]interface{}) {
-			err := mu.UpdateGauge(context.TODO(), ID, value.(float64))
+			err = retry(func() error { return mu.UpdateGauge(context.TODO(), ID, value.(float64)) })
 			if err != nil {
 				return time.UnixMilli(0), fmt.Errorf("updating gauge %s error: %v", ID, err.Error())
 			}
@@ -251,7 +257,7 @@ func LoadMetrics(mu MetricUpdater, src io.Reader) (time.Time, error) {
 		for ID, delta := range counter.(map[string]interface{}) {
 			// Unmarshall from interface{} to float64 and convert to int64
 			// because json.Unmarshall numbers into float64
-			err := mu.AddCounter(context.TODO(), ID, int64(delta.(float64)))
+			err = retry(func() error { return mu.AddCounter(context.TODO(), ID, int64(delta.(float64))) })
 			if err != nil {
 				return time.UnixMilli(0), fmt.Errorf("updating counter %s error: %v", ID, err.Error())
 			}
@@ -333,17 +339,44 @@ func JSONUpdateBatchMetrica(l logger, jmqs []JSONMetricaQuerier, mbu MetricBatch
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	err := mbu.UpdateBatchGauge(ctx, gaugeBatch)
+	err := retry(func() error { return mbu.UpdateBatchGauge(ctx, gaugeBatch) })
 	if err != nil {
 		l.Error("updating gauge batch", "error", err.Error())
 		return err
 	}
 
-	err = mbu.AddBatchCounter(ctx, counterBatch)
+	err = retry(func() error { return mbu.AddBatchCounter(ctx, counterBatch) })
 	if err != nil {
 		l.Error("updating counter batch", "error", err.Error())
 		return err
 	}
 
 	return nil
+}
+
+func retryableError(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case pgerrcode.SerializationFailure, pgerrcode.DeadlockDetected, pgerrcode.LockNotAvailable:
+			return true
+		}
+	}
+	return false
+}
+
+func retry(operation func() error) error {
+	for i := 0; i < 3; i++ {
+		err := operation()
+		if err == nil {
+			return nil
+		}
+
+		if retryableError(err) {
+			time.Sleep(time.Second * time.Duration(2*i+1))
+		} else {
+			return err
+		}
+	}
+	return fmt.Errorf("operation failed after 3 attempts")
 }
