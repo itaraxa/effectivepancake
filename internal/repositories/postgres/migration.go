@@ -32,10 +32,6 @@ func prepareTablesContext(ctx context.Context, db *sql.DB) error {
 	files, _ := migrationFiles.ReadDir("migrations")
 	for _, file := range files {
 		content, _ := migrationFiles.ReadFile("migrations/" + file.Name())
-		// fmt.Println("File:migrations/" + file.Name())
-		// fmt.Println("SQL>>>>>>>>>>>>>>>>>")
-		// fmt.Println(string(content))
-		// fmt.Println(">>>>>>>>>>>>>>>>>SQL")
 		if _, err := db.ExecContext(ctx, string(content)); err != nil {
 			return fmt.Errorf("preapring database error: %w", err)
 		}

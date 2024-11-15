@@ -15,28 +15,6 @@ const (
 	counter = `counter`
 )
 
-// type metricStorager interface {
-// 	metricGetter
-// 	metricUpdater
-// 	metricPrinter
-// 	PingContext(context.Context) error
-// }
-
-// type metricUpdater interface {
-// 	UpdateGauge(context.Context, string, float64) error
-// 	AddCounter(context.Context, string, int64) error
-// }
-
-// type metricGetter interface {
-// 	GetMetrica(ctx context.Context, metricaType string, metricaName string) (interface{}, error)
-// 	GetAllMetrics(ctx context.Context) (interface{}, error)
-// }
-
-// type metricPrinter interface {
-// 	String() string
-// 	HTML() string
-// }
-
 /*
 PostgresRepository is the struct for wrapping PostgreSQL storage
 */
@@ -50,6 +28,7 @@ NewPostgresRepository creates instance of PostgresRepository
 
 Args:
 
+	ctx context.Context
 	databaseURL: string for connection to databse, example: "postgres://username:password@localhost:5432/database_name"
 
 Returns:
@@ -57,16 +36,16 @@ Returns:
 	dbStorager
 	error
 */
-func NewPostgresRepository(databaseURL string) (*PostgresRepository, error) {
+func NewPostgresRepository(ctx context.Context, databaseURL string) (*PostgresRepository, error) {
 	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
 		return &PostgresRepository{}, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	ctx5s, cancel5s := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel5s()
 
-	err = prepareTablesContext(ctx, db)
+	err = prepareTablesContext(ctx5s, db)
 	if err != nil {
 		return &PostgresRepository{}, fmt.Errorf("cannot create tables in database storage: %w", err)
 	}
@@ -158,7 +137,6 @@ func (pr *PostgresRepository) UpdateBatchGauge(ctx context.Context, metrics []st
 	for _, metric := range metrics {
 		_, err := pr.db.ExecContext(ctx, "INSERT INTO gauges (metric_id, metric_value) VALUES ($1, $2);", metric.MetricName, metric.MetricValue)
 		if err != nil {
-			fmt.Println(err.Error())
 			return err
 		}
 	}
@@ -173,7 +151,7 @@ Args:
 
 	ctx context.Context
 	metricName string: unique identifier for the metric
-	value int64: counter value
+	delta int64: counter value
 
 Returns:
 
@@ -250,7 +228,6 @@ func (pr *PostgresRepository) AddBatchCounter(ctx context.Context, metrics []str
 	}()
 
 	for _, metric := range metrics {
-		fmt.Println(metric)
 		// check delta-value in db
 		var currentDelta int64
 		err = tx.QueryRowContext(ctx, "SELECT metric_delta FROM counters WHERE metric_id = $1 ORDER BY metric_timestamp DESC LIMIT 1;", metric.MetricName).Scan(&currentDelta)
@@ -295,7 +272,6 @@ func (pr *PostgresRepository) GetMetrica(ctx context.Context, metricaType string
 	pr.mu.Lock()
 	defer pr.mu.Unlock()
 
-	// fmt.Println(">> data from storage:\n\r", pr.String(ctx))
 	switch metricaType {
 	case gauge:
 		SQL := `SELECT metric_value FROM gauges WHERE metric_id = $1 ORDER BY metric_timestamp DESC LIMIT 1;`

@@ -74,27 +74,33 @@ func (sa *ServerApp) Run() {
 
 	// Ctrl+C handling
 	signalChan := make(chan os.Signal, 1)
+	stopServerChan := make(chan bool, 1)
 	signal.Notify(signalChan, os.Interrupt)
-	go func() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func(cancel context.CancelFunc) {
 		<-signalChan
 		sa.logger.Info("stopping server", "cause", "Exit programm because Ctrl+C press")
+		stopServerChan <- true
 		// Saving metric to a file before Exit
-		if err := services.SaveMetricsToFile(sa.logger, sa.storage, sa.config.FileStoragePath); err == nil {
+		if err := services.SaveMetricsToFile(ctx, sa.logger, sa.storage, sa.config.FileStoragePath); err == nil {
 			sa.logger.Info("metric data has been saved to the file", "filename", sa.config.FileStoragePath)
 		} else {
 			sa.logger.Error("metric data hasn't been saved to the file", "error", err.Error(), "filename", sa.config.FileStoragePath)
 		}
 		_ = sa.storage.Close()
-		os.Exit(0)
-	}()
+
+		cancel()
+		// os.Exit(0)
+	}(cancel)
 
 	// Restoring metric data from the file
 	// если воостанавливаем метрики из файла, то предварительно очищаем хранилище
 	if sa.config.Restore {
 		sa.logger.Info("clear storage")
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		err := sa.storage.Clear(ctx)
+		ctx3s, cancel3s := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel3s()
+		err := sa.storage.Clear(ctx3s)
 		if err != nil {
 			sa.logger.Error("cleaning storage before metrics loading from file", "error", err.Error())
 		}
@@ -111,9 +117,10 @@ func (sa *ServerApp) Run() {
 	if sa.config.StoreInterval > 0 && sa.config.DatabaseDSN == "" {
 		go func() {
 			ticker := time.NewTicker(time.Second * time.Duration(sa.config.StoreInterval))
+			defer ticker.Stop()
 			for {
 				<-ticker.C
-				if err := services.SaveMetricsToFile(sa.logger, sa.storage, sa.config.FileStoragePath); err != nil {
+				if err := services.SaveMetricsToFile(ctx, sa.logger, sa.storage, sa.config.FileStoragePath); err != nil {
 					sa.logger.Error("cannot save data to file", "error", err.Error())
 				}
 			}
@@ -133,31 +140,47 @@ func (sa *ServerApp) Run() {
 			return
 		}
 		defer file.Close()
-		sa.router.Use(middlewares.SaveStorageToFile(sa.logger, sa.storage, file))
+		sa.router.Use(middlewares.SaveStorageToFile(ctx, sa.logger, sa.storage, file))
 	}
 
 	// Add routes
-	// sa.router.Get(`/ping{slash:/*}`, handlers.PingDB(sa.logger, sa.storage))
 	// health-checks
-	sa.router.Get(`/ping`, handlers.PingDB(sa.logger, sa.storage))
-	sa.router.Get(`/ping/`, handlers.PingDB(sa.logger, sa.storage))
+	sa.router.Get(`/ping`, handlers.PingDB(ctx, sa.logger, sa.storage))
+	sa.router.Get(`/ping/`, handlers.PingDB(ctx, sa.logger, sa.storage))
 	// query-row routs
-	sa.router.Get(`/value/{type}/{name}`, handlers.GetMetrica(sa.storage, sa.logger))
-	sa.router.Post(`/update/*`, handlers.UpdateHandler(sa.logger, sa.storage))
+	sa.router.Get(`/value/{type}/{name}`, handlers.GetMetrica(ctx, sa.storage, sa.logger))
+	sa.router.Post(`/update/*`, handlers.UpdateHandler(ctx, sa.logger, sa.storage))
 	// json routs
-	sa.router.Post(`/value`, handlers.JSONGetMetrica(sa.storage, sa.logger))
-	sa.router.Post(`/value/`, handlers.JSONGetMetrica(sa.storage, sa.logger))
-	sa.router.Post(`/update/`, handlers.JSONUpdateHandler(sa.logger, sa.storage))
-	sa.router.Post(`/updates/`, handlers.JSONUpdateBatchHandler(sa.logger, sa.storage))
+	sa.router.Post(`/value`, handlers.JSONGetMetrica(ctx, sa.storage, sa.logger))
+	sa.router.Post(`/value/`, handlers.JSONGetMetrica(ctx, sa.storage, sa.logger))
+	sa.router.Post(`/update/`, handlers.JSONUpdateHandler(ctx, sa.logger, sa.storage))
+	sa.router.Post(`/updates/`, handlers.JSONUpdateBatchHandler(ctx, sa.logger, sa.storage))
 	// get all metrics
-	sa.router.Get(`/`, handlers.GetAllCurrentMetrics(sa.storage, sa.logger))
+	sa.router.Get(`/`, handlers.GetAllCurrentMetrics(ctx, sa.storage, sa.logger))
 
 	// Start router
-	sa.logger.Info("start router")
-	err := http.ListenAndServe(sa.config.Endpoint, sa.router)
-	if err != nil {
-		sa.logger.Fatal(fmt.Sprintf("router error: %v", err))
+	server := &http.Server{
+		Addr:    sa.config.Endpoint,
+		Handler: sa.router,
 	}
+
+	go func() {
+		sa.logger.Info("start router")
+		err := server.ListenAndServe()
+		if err != nil && err != http.ErrServerClosed {
+			sa.logger.Fatal("router error", "err", err.Error())
+		}
+	}()
+
+	// stopping http server
+	<-stopServerChan
+	ctx3s, cancel3s := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel3s()
+	err := server.Shutdown(ctx3s)
+	if err != nil {
+		sa.logger.Fatal("stopping server", "error", err.Error())
+	}
+	sa.logger.Info("server stopped gracefully")
 }
 
 func main() {
@@ -187,7 +210,7 @@ func main() {
 	r := chi.NewRouter()
 
 	if serverConf.DatabaseDSN != "" {
-		s, err := postgres.NewPostgresRepository(serverConf.DatabaseDSN)
+		s, err := postgres.NewPostgresRepository(context.Background(), serverConf.DatabaseDSN)
 		if err != nil {
 			panic(err)
 		}

@@ -63,6 +63,7 @@ GetAllCurrentMetrics creates handler that return all metrica values in HTML view
 
 Args:
 
+	ctx context.Context
 	s metricPrinter: An object implementing the service.Storager interface
 	l logger: a logger for printing messages
 
@@ -70,7 +71,7 @@ Returns:
 
 	http.HandlerFunc
 */
-func GetAllCurrentMetrics(s metricPrinter, l logger) http.HandlerFunc {
+func GetAllCurrentMetrics(ctx context.Context, s metricPrinter, l logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodGet {
 			http.Error(w, "uncorrect request type != GET", http.StatusMethodNotAllowed)
@@ -80,7 +81,7 @@ func GetAllCurrentMetrics(s metricPrinter, l logger) http.HandlerFunc {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
 
-		_, err := w.Write([]byte(s.HTML(context.TODO())))
+		_, err := w.Write([]byte(s.HTML(ctx)))
 		if err != nil {
 			l.Error("cannot write HTML to response body")
 		}
@@ -92,6 +93,7 @@ GetMetrica creates a handler that returns the metric value
 
 Args:
 
+	ctx context.Context
 	s metricGetter: An object implementing the service.Storager interface
 	l logger: a logger for printing messages
 
@@ -99,11 +101,11 @@ Returns:
 
 	http.HandlerFunc
 */
-func GetMetrica(s metricGetter, l logger) http.HandlerFunc {
+func GetMetrica(ctx context.Context, s metricGetter, l logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		l.Info("received a request to get metrica", "type", chi.URLParam(req, "type"), "name", chi.URLParam(req, "name"))
-		v, err := s.GetMetrica(context.TODO(), chi.URLParam(req, "type"), chi.URLParam(req, "name"))
+		v, err := s.GetMetrica(ctx, chi.URLParam(req, "type"), chi.URLParam(req, "name"))
 		if err != nil {
 			w.WriteHeader(http.StatusNotFound)
 			l.Error("cannot get metrica", "type", chi.URLParam(req, "type"), "name", chi.URLParam(req, "name"), "error", err.Error())
@@ -128,6 +130,7 @@ Timeout for getting metrica from storage is 5 seconds.
 
 Args:
 
+	ctx context.Context
 	s metricGetter: a storage that allows getting metric
 	l logger: a logger for printing messages
 
@@ -135,10 +138,10 @@ Returns:
 
 	http.HandlerFunc
 */
-func JSONGetMetrica(s metricGetter, l logger) http.HandlerFunc {
+func JSONGetMetrica(ctx context.Context, s metricGetter, l logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
+		ctx5s, cancel5s := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel5s()
 		// Checks
 		if req.Method != http.MethodPost {
 			http.Error(w, "Only POST request allowed", http.StatusMethodNotAllowed)
@@ -161,7 +164,7 @@ func JSONGetMetrica(s metricGetter, l logger) http.HandlerFunc {
 			return
 		}
 		l.Info("received a request to get metrica in JSON", "type", jm.GetMetricaType(), "name", jm.GetMetricaName())
-		valueFromStorage, err := s.GetMetrica(ctx, jm.GetMetricaType(), jm.GetMetricaName())
+		valueFromStorage, err := s.GetMetrica(ctx5s, jm.GetMetricaType(), jm.GetMetricaName())
 		if err != nil && errors.Is(err, myErrors.ErrMetricaNotFaund) {
 			w.WriteHeader(http.StatusNotFound)
 			l.Error("cannot get metrica", "type", jm.GetMetricaType(), "name", jm.GetMetricaName(), "error", err.Error())
@@ -206,6 +209,7 @@ UpdateHandler creates handler that writes the metric value to the storage
 
 Args:
 
+	ctx context.Context
 	l logger: a logger for printing messages
 	s metricUpdater: a storage that allows update metric data
 
@@ -213,8 +217,10 @@ Returns:
 
 	http.HandlerFunc
 */
-func UpdateHandler(l logger, s metricUpdater) http.HandlerFunc {
+func UpdateHandler(ctx context.Context, l logger, s metricUpdater) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
+		ctx1s, cancel1s := context.WithTimeout(ctx, 1*time.Second)
+		defer cancel1s()
 		queryString := req.URL.Path
 		// Checks
 		if req.Method != http.MethodPost {
@@ -248,7 +254,7 @@ func UpdateHandler(l logger, s metricUpdater) http.HandlerFunc {
 			return
 		}
 
-		err = services.UpdateMetrica(q, s)
+		err = services.UpdateMetrica(ctx1s, q, s)
 		if err != nil && (errors.Is(err, myErrors.ErrParseGauge) || errors.Is(err, myErrors.ErrParseCounter)) {
 			http.Error(w, "the value is not of the specified type", http.StatusBadRequest)
 			l.Error("the value is not of the specified type", "query", q.String(), "error", err.Error())
@@ -271,6 +277,7 @@ JSONUpdateHandler creates handler that updates metric values received in JSON fo
 
 Args:
 
+	ctx context.Context
 	l logger: a logger for printing messages
 	s metricUpdater: a storage that allows update metric data
 
@@ -278,7 +285,7 @@ Returns:
 
 	http.HandlerFunc
 */
-func JSONUpdateHandler(l logger, s metricStorager) http.HandlerFunc {
+func JSONUpdateHandler(ctx context.Context, l logger, s metricStorager) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		// Checks
 		if req.Method != http.MethodPost {
@@ -325,7 +332,7 @@ func JSONUpdateHandler(l logger, s metricStorager) http.HandlerFunc {
 		}
 
 		// updating metrica in storage
-		err = services.JSONUpdateMetrica(jm, s)
+		err = services.JSONUpdateMetrica(ctx, jm, s)
 		if err != nil && (errors.Is(err, myErrors.ErrParseGauge) || errors.Is(err, myErrors.ErrParseCounter)) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			l.Error("the value is not of the specified type", "json query", jm.String(), "error", err.Error())
@@ -343,7 +350,7 @@ func JSONUpdateHandler(l logger, s metricStorager) http.HandlerFunc {
 		}
 
 		// Response
-		value, err := s.GetMetrica(context.TODO(), jm.GetMetricaType(), jm.GetMetricaName())
+		value, err := s.GetMetrica(ctx, jm.GetMetricaType(), jm.GetMetricaName())
 		if err != nil {
 			http.Error(w, "get metrica from storage error", http.StatusInternalServerError)
 			l.Error("get metrica from storage error", "json query", jm.String(), "error", err.Error())
@@ -367,7 +374,20 @@ func JSONUpdateHandler(l logger, s metricStorager) http.HandlerFunc {
 	}
 }
 
-func JSONUpdateBatchHandler(l logger, s metricStorager) http.HandlerFunc {
+/*
+JSONUpdateBatchHandler cretes a handler returning a function for writing a list of metrics
+
+Args:
+
+	ctx context.Context
+	l logger: a logger for printing messages
+	s metricUpdater: a storage that allows update metric data
+
+Returns:
+
+	http.HandlerFunc
+*/
+func JSONUpdateBatchHandler(ctx context.Context, l logger, s metricStorager) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		// Checks
 		if req.Method != http.MethodPost {
@@ -394,22 +414,12 @@ func JSONUpdateBatchHandler(l logger, s metricStorager) http.HandlerFunc {
 		var jmqs []services.JSONMetricaQuerier
 		for _, jmq := range jms {
 			jmqs = append(jmqs, jmq)
-			fmt.Printf("%s (%s) = %p | %p\n\r", jmq.ID, jmq.MType, jmq.Value, jmq.Delta)
+			l.Debug("batch", "content", fmt.Sprintf("%s (%s) = %p | %p\n\r", jmq.ID, jmq.MType, jmq.Value, jmq.Delta))
 		}
 
 		// updating metrica in storage
-		err = services.JSONUpdateBatchMetrica(l, jmqs, s)
+		err = services.JSONUpdateBatchMetrica(ctx, l, jmqs, s)
 		l.Info("request batch update", "body", fmt.Sprint(jmqs))
-		// if err != nil && (errors.Is(err, myErrors.ErrParseGauge) || errors.Is(err, myErrors.ErrParseCounter)) {
-		// 	http.Error(w, err.Error(), http.StatusBadRequest)
-		// 	l.Error("the value is not of the specified type", "json query", jms.String(), "error", err.Error())
-		// 	return
-		// }
-		// if err != nil && errors.Is(err, myErrors.ErrBadType) {
-		// 	http.Error(w, err.Error(), http.StatusBadRequest)
-		// 	l.Error("unknown metrica type update error", "json query", jm.String(), "error", err.Error())
-		// 	return
-		// }
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			l.Error("metrica update error", "json query", buf.String(), "error", err.Error())

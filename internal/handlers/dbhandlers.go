@@ -24,7 +24,7 @@ Returns:
 
 	http.HandlerFunc
 */
-func PingDB(l logger, s storagChecker) http.HandlerFunc {
+func PingDB(ctx context.Context, l logger, s storagChecker) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodGet {
 			http.Error(w, "wrong request type != GET", http.StatusMethodNotAllowed)
@@ -32,9 +32,9 @@ func PingDB(l logger, s storagChecker) http.HandlerFunc {
 		}
 		l.Info("received a request to ping db-storage")
 		w.Header().Set("Content-Type", "text/html")
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		if err := services.CheckConnectionStorage(ctx, l, s); err != nil {
+		ctx3s, cancel3s := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel3s()
+		if err := services.CheckConnectionStorage(ctx3s, l, s); err != nil {
 			l.Error("error connection to storage", "error", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 		} else {
@@ -43,33 +43,3 @@ func PingDB(l logger, s storagChecker) http.HandlerFunc {
 		}
 	}
 }
-
-// func Ping(l logger, dsn string) http.HandlerFunc {
-// 	return func(w http.ResponseWriter, req *http.Request) {
-// 		if req.Method != http.MethodGet {
-// 			http.Error(w, "wrong request type != GET", http.StatusMethodNotAllowed)
-// 			return
-// 		}
-// 		l.Info("received a request to ping db-storage")
-// 		w.Header().Set("Content-Type", "text/html")
-// 		db, err := sql.Open("pgx", dsn)
-// 		if err != nil {
-// 			l.Error("error connection to storage", "error", err.Error())
-// 			w.WriteHeader(http.StatusInternalServerError)
-// 			return
-// 		}
-// 		l.Info("connection openned", "dsn", dsn)
-
-// 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-// 		defer cancel()
-// 		if err := db.PingContext(ctx); err != nil {
-// 			l.Error("error ping storage database", "error", err.Error())
-// 			w.WriteHeader(http.StatusInternalServerError)
-// 			return
-// 		} else {
-// 			l.Info("succesful ping storage")
-// 			w.WriteHeader(http.StatusOK)
-// 			return
-// 		}
-// 	}
-// }

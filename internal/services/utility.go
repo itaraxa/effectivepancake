@@ -4,7 +4,12 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
+	"time"
+
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func ShowQuery(q Querier) {
@@ -72,4 +77,53 @@ func decompress(data []byte) ([]byte, error) {
 	}
 
 	return b.Bytes(), nil
+}
+
+/*
+retryableError checks the error type and decides whether to retry the request
+
+Args:
+
+	err error: a checkable error
+
+Returns:
+
+	bool: true - do retry, false - don't retry
+*/
+func retryableError(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case pgerrcode.DeadlockDetected, pgerrcode.LockNotAvailable, pgerrcode.ConnectionException, pgerrcode.ConnectionFailure, pgerrcode.SQLClientUnableToEstablishSQLConnection:
+			return true
+		}
+	}
+	return false
+}
+
+/*
+retry a wrapper function for retrying functions of the form `func() error`. Performs 3 retries with delays of 1, 3, and 5 seconds
+
+Args:
+
+	operation func() error: function for retrying
+
+Returns:
+
+	error
+*/
+func retry(operation func() error) error {
+	for i := 0; i < 3; i++ {
+		err := operation()
+		if err == nil {
+			return nil
+		}
+
+		if retryableError(err) {
+			time.Sleep(time.Second * time.Duration(2*i+1))
+		} else {
+			return err
+		}
+	}
+	return fmt.Errorf("operation failed after 3 attempts")
 }

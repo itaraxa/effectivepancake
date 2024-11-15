@@ -44,7 +44,6 @@ type MetricPrinter interface {
 }
 
 // Интерфейс для описания взаимодействия с запросом на обновление метрики
-// TO-DO: move from Qury to Metrica
 type Querier interface {
 	GetMetricaType() string
 	SetMetricaType(string) error

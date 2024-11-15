@@ -43,7 +43,6 @@ func sendMetricsToServerQueryStr(l logger, ms MetricsGetter, serverURL string, c
 			l.Error("cannot create request", "error", err.Error())
 			return err
 		}
-		// res, err := client.Post(queryString, "text/plain", nil)
 		res, err := retryDo(l, client, req)
 		if err != nil {
 			l.Error("cannot send metrics to server")
@@ -88,7 +87,6 @@ func sendMetricaToServerJSON(l logger, ms MetricsGetter, serverURL string, clien
 			l.Error("cannot create request", "error", err.Error())
 			return err
 		}
-		// resp, err := client.Post(fmt.Sprintf("http://%s/update/", serverURL), "application/json", bytes.NewBuffer(jsonDataReq))
 		resp, err := retryDo(l, client, req)
 		if err != nil {
 			return errors.ErrSendingMetricsToServer
@@ -117,7 +115,6 @@ func sendMetricaToServerBatch(l logger, ms MetricsGetter, serverURL string, clie
 		l.Error("cannot create request", "error", err.Error())
 		return err
 	}
-	// resp, err := client.Post(fmt.Sprintf("http://%s/updates/", serverURL), "application/json", bytes.NewBuffer(jsonDataReq))
 	resp, err := retryDo(l, client, req)
 	if err != nil {
 		return errors.ErrSendingMetricsToServer
@@ -171,7 +168,6 @@ func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, c
 		}
 
 		start := time.Now()
-		// resp, err := client.Do(req)
 		resp, err := retryDo(l, client, req)
 		if err != nil {
 			return errors.ErrSendingMetricsToServer
@@ -231,9 +227,7 @@ func sendMetricaToServerBatchgzip(l logger, ms MetricsGetter, serverURL string, 
 
 	start := time.Now()
 	resp, err := retryDo(l, client, req)
-	// resp, err := client.Do(req)
 	if err != nil {
-		// return errors.NewRetryError(err, tryNumber)
 		return errors.ErrSendingMetricsToServer
 	}
 	defer resp.Body.Close()
@@ -269,8 +263,22 @@ func sendMetricaToServerBatchgzip(l logger, ms MetricsGetter, serverURL string, 
 	return nil
 }
 
+/*
+retryDo a retry function for the agent application. Wrapper around the Client.Do()
+
+Args:
+
+	l logger
+	client *http.Client
+	req *http.Request
+
+Returns:
+
+	*http.Response
+	error
+*/
 func retryDo(l logger, client *http.Client, req *http.Request) (*http.Response, error) {
-	// try 1
+	// try 0
 	resp, err := client.Do(req)
 	if err == nil {
 		return resp, nil
@@ -278,7 +286,7 @@ func retryDo(l logger, client *http.Client, req *http.Request) (*http.Response, 
 	l.Error("error sending metric to server", "try", 1, "timeout", time.Second*1)
 	time.Sleep(1 * time.Second)
 
-	// try 2
+	// try 1
 	resp, err = client.Do(req)
 	if err == nil {
 		return resp, nil
@@ -286,7 +294,7 @@ func retryDo(l logger, client *http.Client, req *http.Request) (*http.Response, 
 	l.Error("error sending metric to server", "try", 2, "timeout", time.Second*3)
 	time.Sleep(3 * time.Second)
 
-	// try 3
+	// try 2
 	resp, err = client.Do(req)
 	if err == nil {
 		return resp, nil
@@ -536,46 +544,24 @@ REPORTING:
 				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
 					_ = sendMetricaToServerJSONgzip(l, <-dataChan, config.AddressServer, client)
 				}(l, dataChan, conf, client)
-				// if err != nil {
-				// 	l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
-				// 	// Pause for next sending
-				// 	time.Sleep(1 * time.Second)
-				// }
 			case conf.ReportMode == `json` && conf.Compress == `none` && !conf.Batch:
 				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
 					_ = sendMetricaToServerJSON(l, <-dataChan, config.AddressServer, client)
 				}(l, dataChan, conf, client)
-				// if err != nil {
-				// l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
-				// // Pause for next sending
-				// time.Sleep(1 * time.Second)
-				// }
 			case conf.ReportMode == `raw` && !conf.Batch:
 				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
 					_ = sendMetricsToServerQueryStr(l, <-dataChan, config.AddressServer, client)
 				}(l, dataChan, conf, client)
-				// if err != nil {
-				// 	l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
-				// 	// Pause for next sending
-				// 	time.Sleep(1 * time.Second)
-				// }
+
 			case conf.Batch && conf.Compress == `none`:
 				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
 					_ = sendMetricaToServerBatch(l, <-dataChan, config.AddressServer, client)
 				}(l, dataChan, conf, client)
-				// if err != nil {
-				// 	l.Error("sending batch metrics to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
-				// 	time.Sleep(1 * time.Second)
-				// }
+
 			case conf.Batch && conf.Compress == `gzip`:
 				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
 					_ = sendMetricaToServerBatchgzip(l, <-dataChan, config.AddressServer, client)
 				}(l, dataChan, conf, client)
-				// err := sendMetricaToServerBatchgzip(l, <-dataChan, config.AddressServer, client)
-				// if err != nil {
-				// 	l.Error("sending batch metrics to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
-				// 	time.Sleep(1 * time.Second)
-				// }
 			}
 		}
 		reportCounter++

@@ -246,13 +246,13 @@ Returns:
 
 	func(next http.Handler) http.Handler
 */
-func SaveStorageToFile(l logger, s metricGetter, dst io.WriteCloser) func(next http.Handler) http.Handler {
+func SaveStorageToFile(ctx context.Context, l logger, s metricGetter, dst io.WriteCloser) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			wrappedWriter := &responseWriterWrapper{ResponseWriter: w, statusCode: http.StatusOK}
 			next.ServeHTTP(wrappedWriter, r)
 			if wrappedWriter.statusCode == http.StatusOK {
-				err := services.WriteMetricsWithTimestamp(s, dst)
+				err := services.WriteMetricsWithTimestamp(ctx, s, dst)
 				if err != nil {
 					l.Error("error writing to file", "error", err.Error())
 					return

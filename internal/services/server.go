@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,9 +12,6 @@ import (
 
 	myErrors "github.com/itaraxa/effectivepancake/internal/errors"
 	"github.com/itaraxa/effectivepancake/internal/models"
-
-	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 const (
@@ -61,6 +57,7 @@ Writing data from the instance models.Query to storage.
 
 Args:
 
+	ctx context.Context
 	q Querier: object, implementing Querier interface
 	s Storager: object, implementing Storager interface
 
@@ -68,7 +65,7 @@ Returns:
 
 	error: nil or error, if occurred
 */
-func UpdateMetrica(q Querier, s MetricUpdater) error {
+func UpdateMetrica(ctx context.Context, q Querier, s MetricUpdater) error {
 	switch q.GetMetricaType() {
 	case gauge:
 		g, err := strconv.ParseFloat(q.GetMetricaRawValue(), 64)
@@ -76,7 +73,7 @@ func UpdateMetrica(q Querier, s MetricUpdater) error {
 			return myErrors.ErrParseGauge
 		}
 
-		err = retry(func() error { return s.UpdateGauge(context.TODO(), q.GetMetricName(), g) })
+		err = retry(func() error { return s.UpdateGauge(ctx, q.GetMetricName(), g) })
 
 		if err != nil {
 			return myErrors.ErrUpdateGauge
@@ -86,7 +83,7 @@ func UpdateMetrica(q Querier, s MetricUpdater) error {
 		if err != nil {
 			return myErrors.ErrParseCounter
 		}
-		err = retry(func() error { return s.AddCounter(context.TODO(), q.GetMetricName(), int64(c)) })
+		err = retry(func() error { return s.AddCounter(ctx, q.GetMetricName(), int64(c)) })
 		if err != nil {
 			return myErrors.ErrAddCounter
 		}
@@ -101,6 +98,7 @@ JSONUpdateMetrica updates the metric value received from the request in the stor
 
 Args:
 
+	ctx context.Context
 	jmq JSONMetricaQuerier: a request that allows getting the gauge value or counter delta
 	mu MetricUpdater: a storage that allows saving a metric
 
@@ -108,15 +106,17 @@ Returns:
 
 	error: nil or error, if occured
 */
-func JSONUpdateMetrica(jmq JSONMetricaQuerier, mu MetricUpdater) error {
+func JSONUpdateMetrica(ctx context.Context, jmq JSONMetricaQuerier, mu MetricUpdater) error {
+	ctx1s, cancel1s := context.WithTimeout(ctx, 1*time.Second)
+	defer cancel1s()
 	switch jmq.GetMetricaType() {
 	case gauge:
-		err := retry(func() error { return mu.UpdateGauge(context.TODO(), jmq.GetMetricaName(), *jmq.GetMetricaValue()) })
+		err := retry(func() error { return mu.UpdateGauge(ctx1s, jmq.GetMetricaName(), *jmq.GetMetricaValue()) })
 		if err != nil {
 			return myErrors.ErrUpdateGauge
 		}
 	case counter:
-		err := retry(func() error { return mu.AddCounter(context.TODO(), jmq.GetMetricaName(), *jmq.GetMetricaCounter()) })
+		err := retry(func() error { return mu.AddCounter(ctx1s, jmq.GetMetricaName(), *jmq.GetMetricaCounter()) })
 		if err != nil {
 			return myErrors.ErrAddCounter
 		}
@@ -131,6 +131,7 @@ WriteMetrics saves metrics from storage to the any writer
 
 Args:
 
+	ctx context.Context
 	mg MetricGetter: a storage that allows getting metrics
 	dst io.Writer: an object that allows data to be written to it
 
@@ -138,8 +139,8 @@ Returns:
 
 	error: nil or error, if occured
 */
-func WriteMetrics(mg MetricGetter, dst io.Writer) error {
-	metrics, err := mg.GetAllMetrics(context.TODO())
+func WriteMetrics(ctx context.Context, mg MetricGetter, dst io.Writer) error {
+	metrics, err := mg.GetAllMetrics(ctx)
 	if err != nil {
 		return err
 	}
@@ -159,6 +160,7 @@ WriteMetrics saves metrics from storage and current timestamp to the any writer
 
 Args:
 
+	ctx context.Context
 	mg MetricGetter: a storage that allows getting metrics
 	dst io.Writer: an object that allows data to be written to it
 
@@ -166,10 +168,10 @@ Returns:
 
 	error: nil or error, if occured
 */
-func WriteMetricsWithTimestamp(mg MetricGetter, dst io.Writer) error {
+func WriteMetricsWithTimestamp(ctx context.Context, mg MetricGetter, dst io.Writer) error {
 	blob := make(map[string]interface{})
 	blob["timestamp"] = time.Now()
-	blob["metrics"], _ = mg.GetAllMetrics(context.TODO())
+	blob["metrics"], _ = mg.GetAllMetrics(ctx)
 
 	data, err := json.MarshalIndent(blob, "\t", "\t")
 	if err != nil {
@@ -188,6 +190,7 @@ THis is warapper over WriteMetricsWithTimestamp(mg MetricGetter, dst io.Writer) 
 
 Args:
 
+	ctx context.Context
 	l logger: a logger used for printing messages
 	mg MetricGetter: a storage that allows getting metrics
 	fileName string: the file name for saving metric data
@@ -196,14 +199,14 @@ Returns:
 
 	error: nil or error, if occured
 */
-func SaveMetricsToFile(l logger, mg MetricGetter, fileName string) error {
+func SaveMetricsToFile(ctx context.Context, l logger, mg MetricGetter, fileName string) error {
 	file, err := os.OpenFile(fileName, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
 	if err != nil {
 		l.Debug("cannot open file for writing", "error", err.Error(), "filename", fileName)
 		return fmt.Errorf("cannot open %s for writing: %v", fileName, err)
 	}
 	defer file.Close()
-	err = WriteMetricsWithTimestamp(mg, file)
+	err = WriteMetricsWithTimestamp(ctx, mg, file)
 	if err != nil {
 		l.Debug("cannot save data to file", "error", err.Error(), "filename")
 		return fmt.Errorf("cannot save date into %s: %v", fileName, err)
@@ -250,7 +253,6 @@ func LoadMetrics(mu MetricUpdater, src io.Reader) (time.Time, error) {
 			if err != nil {
 				return time.UnixMilli(0), fmt.Errorf("updating gauge %s error: %v", ID, err.Error())
 			}
-			fmt.Printf("Update gauge from file: %s %g\n\r", ID, value.(float64))
 		}
 	}
 	if counter, ok := metrics.(map[string]interface{})["counters"]; ok {
@@ -261,7 +263,6 @@ func LoadMetrics(mu MetricUpdater, src io.Reader) (time.Time, error) {
 			if err != nil {
 				return time.UnixMilli(0), fmt.Errorf("updating counter %s error: %v", ID, err.Error())
 			}
-			fmt.Printf("Add counter from file: %s %d\n\r", ID, int64(delta.(float64)))
 		}
 	}
 
@@ -300,7 +301,21 @@ func LoadMetricsFromFile(l logger, mu MetricUpdater, fileName string) error {
 	return nil
 }
 
-func JSONUpdateBatchMetrica(l logger, jmqs []JSONMetricaQuerier, mbu MetricBatchUpdater) error {
+/*
+JSONUpdateBatchMetrica a function that performs batch updates of metrics in the storage
+
+Args:
+
+	ctx context.Context
+	l logger: a logger used for printing messages
+	jmqs []JSONMetricaQuerier: a slice of objcets, that implements the JSONMetricaQuerier interface
+	mbu MetricBatchUpdater: object, that implements the MetricBatchUpdater interface
+
+Returns:
+
+	error
+*/
+func JSONUpdateBatchMetrica(ctx context.Context, l logger, jmqs []JSONMetricaQuerier, mbu MetricBatchUpdater) error {
 	gaugeBatch := []struct {
 		MetricName  string
 		MetricValue *float64
@@ -311,8 +326,6 @@ func JSONUpdateBatchMetrica(l logger, jmqs []JSONMetricaQuerier, mbu MetricBatch
 		MetricDelta *int64
 	}{}
 
-	// gaugeBath := make(map[string]*float64)
-	// counterBatch := make(map[string]*int64)
 	for _, jmq := range jmqs {
 		switch jmq.GetMetricaType() {
 		case gauge:
@@ -322,7 +335,6 @@ func JSONUpdateBatchMetrica(l logger, jmqs []JSONMetricaQuerier, mbu MetricBatch
 				MetricName  string
 				MetricValue *float64
 			}{MetricName: name, MetricValue: value})
-			// gaugeBath[name] = value
 
 		case counter:
 			name := jmq.GetMetricaName()
@@ -331,53 +343,24 @@ func JSONUpdateBatchMetrica(l logger, jmqs []JSONMetricaQuerier, mbu MetricBatch
 				MetricName  string
 				MetricDelta *int64
 			}{MetricName: name, MetricDelta: delta})
-			// counterBatch[name] = delta
 		}
 	}
 	l.Debug("get batch for load", "gauges", len(gaugeBatch), "counters", len(counterBatch))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
+	ctx3s, cancel3s := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel3s()
 
-	err := retry(func() error { return mbu.UpdateBatchGauge(ctx, gaugeBatch) })
+	err := retry(func() error { return mbu.UpdateBatchGauge(ctx3s, gaugeBatch) })
 	if err != nil {
 		l.Error("updating gauge batch", "error", err.Error())
 		return err
 	}
 
-	err = retry(func() error { return mbu.AddBatchCounter(ctx, counterBatch) })
+	err = retry(func() error { return mbu.AddBatchCounter(ctx3s, counterBatch) })
 	if err != nil {
 		l.Error("updating counter batch", "error", err.Error())
 		return err
 	}
 
 	return nil
-}
-
-func retryableError(err error) bool {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		fmt.Println(pgErr.Code)
-		switch pgErr.Code {
-		case pgerrcode.DeadlockDetected, pgerrcode.LockNotAvailable, pgerrcode.ConnectionException, pgerrcode.ConnectionFailure, pgerrcode.SQLClientUnableToEstablishSQLConnection:
-			return true
-		}
-	}
-	return false
-}
-
-func retry(operation func() error) error {
-	for i := 0; i < 3; i++ {
-		err := operation()
-		if err == nil {
-			return nil
-		}
-
-		if retryableError(err) {
-			time.Sleep(time.Second * time.Duration(2*i+1))
-		} else {
-			return err
-		}
-	}
-	return fmt.Errorf("operation failed after 3 attempts")
 }

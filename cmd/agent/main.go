@@ -21,7 +21,6 @@ type AgentApp struct {
 	wg         *sync.WaitGroup
 }
 
-// TO-DO: rewrite with interfaces
 func NewAgentApp(logger logger.Logger, httpClient *http.Client, config *config.AgentConfig) *AgentApp {
 	return &AgentApp{
 		logger:     logger,
@@ -80,22 +79,23 @@ func main() {
 	err := agentConf.ParseFlags()
 	if err != nil {
 		fmt.Println(err)
-		os.Exit(1)
+		return
 	}
 	if agentConf.ShowVersion {
 		fmt.Println(version.AgentVersion)
-		os.Exit(0)
+		return
 	}
 
 	err = agentConf.ParseEnv()
 	if err != nil {
 		fmt.Println(err)
-		os.Exit(1)
+		return
 	}
 
 	logger, err := logger.NewZapLogger(agentConf.LogLevel)
 	if err != nil {
-		panic(err)
+		fmt.Println(err)
+		return
 	}
 	defer logger.Sync()
 	myClient := &http.Client{
