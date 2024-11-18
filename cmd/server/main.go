@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -79,19 +79,22 @@ func (sa *ServerApp) Run() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func(cancel context.CancelFunc) {
+		defer cancel()
+		defer func() {
+			_ = sa.storage.Close()
+		}()
 		<-signalChan
 		sa.logger.Info("stopping server", "cause", "Exit programm because Ctrl+C press")
-		stopServerChan <- true
 		// Saving metric to a file before Exit
-		if err := services.SaveMetricsToFile(ctx, sa.logger, sa.storage, sa.config.FileStoragePath); err == nil {
-			sa.logger.Info("metric data has been saved to the file", "filename", sa.config.FileStoragePath)
-		} else {
+		err := services.SaveMetricsToFile(ctx, sa.logger, sa.storage, sa.config.FileStoragePath)
+		if err != nil {
 			sa.logger.Error("metric data hasn't been saved to the file", "error", err.Error(), "filename", sa.config.FileStoragePath)
+			return
 		}
-		_ = sa.storage.Close()
-
-		cancel()
-		// os.Exit(0)
+		sa.logger.Info("metric data has been saved to the file", "filename", sa.config.FileStoragePath)
+		stopServerChan <- true
+		// _ = sa.storage.Close()
+		// cancel()
 	}(cancel)
 
 	// Restoring metric data from the file
@@ -187,39 +190,37 @@ func main() {
 	serverConf := config.NewServerConfig()
 	err := serverConf.ParseFlags()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error parsing flags: %v", err)
-		return
+		log.Fatalf("error parsing flags: %v", err)
 	}
 	if serverConf.ShowVersion {
-		fmt.Println(version.ServerVersion)
+		log.Print(version.ServerVersion)
 		return
 	}
 
 	err = serverConf.ParseEnv()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error parsing environment variable: %v", err)
-		return
+		log.Fatalf("error parsing environment variable: %v", err)
 	}
 
 	logger, err := logger.NewZapLogger(serverConf.LogLevel)
 	if err != nil {
-		panic(err)
+		log.Fatalf("error creating logger: %v", err)
 	}
 	defer logger.Sync()
 
 	r := chi.NewRouter()
 
+	var s services.MetricStorager
 	if serverConf.DatabaseDSN != "" {
-		s, err := postgres.NewPostgresRepository(context.Background(), serverConf.DatabaseDSN)
+		s, err = postgres.NewPostgresRepository(context.Background(), serverConf.DatabaseDSN)
 		if err != nil {
-			panic(err)
+			log.Fatalf("error connecting to database: %v", err)
 		}
 		defer s.Close()
-		app := NewServerApp(logger, s, r, serverConf)
-		app.Run()
 	} else {
-		s := memstorage.NewMemStorage()
-		app := NewServerApp(logger, s, r, serverConf)
-		app.Run()
+		s = memstorage.NewMemStorage()
 	}
+	app := NewServerApp(logger, s, r, serverConf)
+	app.Run()
+
 }
