@@ -269,7 +269,7 @@ func NewMemStorage() *MemStorage {
 
 func (m *MemStorage) PingContext(ctx context.Context) error {
 	if m.Counter == nil || m.Gauge == nil {
-		return myErrors.MemStorageNotInitilized
+		return myErrors.ErrMemStorageNotInitilized
 	}
 	return nil
 }
