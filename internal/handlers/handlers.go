@@ -73,10 +73,6 @@ Returns:
 */
 func GetAllCurrentMetrics(ctx context.Context, s metricPrinter, l logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		if req.Method != http.MethodGet {
-			http.Error(w, "uncorrect request type != GET", http.StatusMethodNotAllowed)
-			return
-		}
 		l.Info("received a request to retrieve the current value of all metrics")
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
@@ -142,12 +138,6 @@ func JSONGetMetrica(ctx context.Context, s metricGetter, l logger) http.HandlerF
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctxWithTimeout, cancelWithTimeout := context.WithTimeout(ctx, 5*time.Second)
 		defer cancelWithTimeout()
-		// Checks
-		if req.Method != http.MethodPost {
-			http.Error(w, "Only POST request allowed", http.StatusMethodNotAllowed)
-			l.Error("Only POST request allowed")
-			return
-		}
 
 		// Processing
 		var buf bytes.Buffer
@@ -205,7 +195,7 @@ func JSONGetMetrica(ctx context.Context, s metricGetter, l logger) http.HandlerF
 }
 
 /*
-UpdateHandler creates handler that writes the metric value to the storage
+PostUpdateHandler creates handler that writes the metric value to the storage
 
 Args:
 
@@ -217,17 +207,12 @@ Returns:
 
 	http.HandlerFunc
 */
-func UpdateHandler(ctx context.Context, l logger, s metricUpdater) http.HandlerFunc {
+func PostUpdateHandler(ctx context.Context, l logger, s metricUpdater) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctx1s, cancel1s := context.WithTimeout(ctx, 1*time.Second)
 		defer cancel1s()
 		queryString := req.URL.Path
-		// Checks
-		if req.Method != http.MethodPost {
-			http.Error(w, "Only POST request allowed", http.StatusMethodNotAllowed)
-			l.Error("Only POST request allowed")
-			return
-		}
+
 		if len(queryString) > maxQueryStringLength {
 			http.Error(w, "Query sting too long", http.StatusBadRequest)
 			l.Error("query string too long", "query string", queryString[:maxQueryStringLength], "query string length", len(queryString))
@@ -273,7 +258,7 @@ func UpdateHandler(ctx context.Context, l logger, s metricUpdater) http.HandlerF
 }
 
 /*
-JSONUpdateHandler creates handler that updates metric values received in JSON format to the storage
+PostJSONUpdateHandler creates handler that updates metric values received in JSON format to the storage
 
 Args:
 
@@ -285,15 +270,8 @@ Returns:
 
 	http.HandlerFunc
 */
-func JSONUpdateHandler(ctx context.Context, l logger, s metricStorager) http.HandlerFunc {
+func PostJSONUpdateHandler(ctx context.Context, l logger, s metricStorager) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		// Checks
-		if req.Method != http.MethodPost {
-			http.Error(w, "Only POST request allowed", http.StatusMethodNotAllowed)
-			l.Error("Only POST request allowed")
-			return
-		}
-
 		// Processing
 		var buf bytes.Buffer
 		_, err := buf.ReadFrom(req.Body)
@@ -375,7 +353,7 @@ func JSONUpdateHandler(ctx context.Context, l logger, s metricStorager) http.Han
 }
 
 /*
-JSONUpdateBatchHandler cretes a handler returning a function for writing a list of metrics
+PostJSONUpdateBatchHandler cretes a handler returning a function for writing a list of metrics
 
 Args:
 
@@ -387,14 +365,8 @@ Returns:
 
 	http.HandlerFunc
 */
-func JSONUpdateBatchHandler(ctx context.Context, l logger, s metricStorager) http.HandlerFunc {
+func PostJSONUpdateBatchHandler(ctx context.Context, l logger, s metricStorager) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		// Checks
-		if req.Method != http.MethodPost {
-			http.Error(w, "Only POST request allowed", http.StatusMethodNotAllowed)
-			l.Error("Only POST request allowed")
-			return
-		}
 		// Processing
 		var buf bytes.Buffer
 		_, err := buf.ReadFrom(req.Body)

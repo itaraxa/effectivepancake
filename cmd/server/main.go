@@ -152,12 +152,12 @@ func (sa *ServerApp) Run() {
 	sa.router.Get(`/ping/`, handlers.PingDB(ctx, sa.logger, sa.storage))
 	// query-row routs
 	sa.router.Get(`/value/{type}/{name}`, handlers.GetMetrica(ctx, sa.storage, sa.logger))
-	sa.router.Post(`/update/*`, handlers.UpdateHandler(ctx, sa.logger, sa.storage))
+	sa.router.Post(`/update/*`, handlers.PostUpdateHandler(ctx, sa.logger, sa.storage))
 	// json routs
 	sa.router.Post(`/value`, handlers.JSONGetMetrica(ctx, sa.storage, sa.logger))
 	sa.router.Post(`/value/`, handlers.JSONGetMetrica(ctx, sa.storage, sa.logger))
-	sa.router.Post(`/update/`, handlers.JSONUpdateHandler(ctx, sa.logger, sa.storage))
-	sa.router.Post(`/updates/`, handlers.JSONUpdateBatchHandler(ctx, sa.logger, sa.storage))
+	sa.router.Post(`/update/`, handlers.PostJSONUpdateHandler(ctx, sa.logger, sa.storage))
+	sa.router.Post(`/updates/`, handlers.PostJSONUpdateBatchHandler(ctx, sa.logger, sa.storage))
 	// get all metrics
 	sa.router.Get(`/`, handlers.GetAllCurrentMetrics(ctx, sa.storage, sa.logger))
 
