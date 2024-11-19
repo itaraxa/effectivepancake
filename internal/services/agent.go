@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/itaraxa/effectivepancake/internal/config"
-	"github.com/itaraxa/effectivepancake/internal/errors"
+	myErrors "github.com/itaraxa/effectivepancake/internal/errors"
 	"github.com/itaraxa/effectivepancake/internal/models"
 )
 
@@ -30,7 +30,11 @@ Returns:
 	error: nil or error, encountered during sending data
 */
 func sendMetricsToServerQueryStr(l logger, ms MetricsGetter, serverURL string, client *http.Client) error {
-	for _, m := range ms.GetData() {
+	mData := ms.GetData()
+	if len(mData) == 0 {
+		return myErrors.ErrNoMetrics
+	}
+	for _, m := range mData {
 		queryString := ""
 		if m.MType == "gauge" {
 			queryString = fmt.Sprintf("http://%s/update/%s/%s/%f", serverURL, m.MType, m.ID, *m.Value)
@@ -46,7 +50,7 @@ func sendMetricsToServerQueryStr(l logger, ms MetricsGetter, serverURL string, c
 		res, err := retryDo(l, client, req)
 		if err != nil {
 			l.Error("cannot send metrics to server")
-			return errors.ErrSendingMetricsToServer
+			return myErrors.ErrSendingMetricsToServer
 		}
 		// Reading response body to the end to Close body and release the TCP-connection
 		_, err = io.Copy(io.Discard, res.Body)
@@ -74,7 +78,11 @@ Returns:
 	error: nil or error, encountered during sending data
 */
 func sendMetricaToServerJSON(l logger, ms MetricsGetter, serverURL string, client *http.Client) error {
-	for _, m := range ms.GetData() {
+	mData := ms.GetData()
+	if len(mData) == 0 {
+		return myErrors.ErrNoMetrics
+	}
+	for _, m := range mData {
 		jsonDataReq, err := json.Marshal(m)
 		if err != nil {
 			return err
@@ -89,7 +97,7 @@ func sendMetricaToServerJSON(l logger, ms MetricsGetter, serverURL string, clien
 		}
 		resp, err := retryDo(l, client, req)
 		if err != nil {
-			return errors.ErrSendingMetricsToServer
+			return myErrors.ErrSendingMetricsToServer
 		}
 		var buf bytes.Buffer
 		_, err = buf.ReadFrom(resp.Body)
@@ -104,7 +112,11 @@ func sendMetricaToServerJSON(l logger, ms MetricsGetter, serverURL string, clien
 }
 
 func sendMetricaToServerBatch(l logger, ms MetricsGetter, serverURL string, client *http.Client) error {
-	jsonDataReq, err := json.Marshal(ms.GetData())
+	mData := ms.GetData()
+	if len(mData) == 0 {
+		return myErrors.ErrNoMetrics
+	}
+	jsonDataReq, err := json.Marshal(mData)
 	if err != nil {
 		return err
 	}
@@ -117,7 +129,7 @@ func sendMetricaToServerBatch(l logger, ms MetricsGetter, serverURL string, clie
 	}
 	resp, err := retryDo(l, client, req)
 	if err != nil {
-		return errors.ErrSendingMetricsToServer
+		return myErrors.ErrSendingMetricsToServer
 	}
 	var buf bytes.Buffer
 	_, err = buf.ReadFrom(resp.Body)
@@ -147,7 +159,11 @@ Returns:
 	error: nil or error, encountered during sending data
 */
 func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, client *http.Client) error {
-	for _, m := range ms.GetData() {
+	mData := ms.GetData()
+	if len(mData) == 0 {
+		return myErrors.ErrNoMetrics
+	}
+	for _, m := range mData {
 		jsonDataReq, err := json.Marshal(m)
 		if err != nil {
 			return err
@@ -170,7 +186,7 @@ func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, c
 		start := time.Now()
 		resp, err := retryDo(l, client, req)
 		if err != nil {
-			return errors.ErrSendingMetricsToServer
+			return myErrors.ErrSendingMetricsToServer
 		}
 		defer resp.Body.Close()
 
@@ -181,12 +197,12 @@ func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, c
 			_, err = buf.ReadFrom(resp.Body)
 			if err != nil {
 				l.Error("cannot read responce body")
-				return errors.ErrGettingAnswerFromServer
+				return myErrors.ErrGettingAnswerFromServer
 			}
 			data, err := decompress(buf.Bytes())
 			if err != nil {
 				l.Error("cannot decompress responce body")
-				return errors.ErrGettingAnswerFromServer
+				return myErrors.ErrGettingAnswerFromServer
 			}
 			l.Info("json data from responce", "string representation", string(data), "duration", time.Since(start))
 		// get uncompressed data from server
@@ -195,7 +211,7 @@ func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, c
 			_, err = buf.ReadFrom(resp.Body)
 			if err != nil {
 				l.Error("cannot read responce body")
-				return errors.ErrGettingAnswerFromServer
+				return myErrors.ErrGettingAnswerFromServer
 			}
 			l.Info("json data from responce", "string representation", buf.String(), "duration", time.Since(start))
 		default:
@@ -206,13 +222,18 @@ func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, c
 }
 
 func sendMetricaToServerBatchgzip(l logger, ms MetricsGetter, serverURL string, client *http.Client) error {
-	jsonDataReq, err := json.Marshal(ms.GetData())
+	mData := ms.GetData()
+	if len(mData) == 0 {
+		return myErrors.ErrNoMetrics
+	}
+	jsonDataReq, err := json.Marshal(mData)
 	if err != nil {
 		return err
 	}
 	jsonGzipDataReq, err := compress(jsonDataReq)
 	if err != nil {
 		l.Error("cannot compress data", "error", err.Error())
+		return err
 	}
 	l.Debug("json data for send compressd", "string representation", string(jsonDataReq), "compress ratio", float64(len(jsonDataReq))/float64(len(jsonGzipDataReq)))
 
@@ -228,7 +249,7 @@ func sendMetricaToServerBatchgzip(l logger, ms MetricsGetter, serverURL string, 
 	start := time.Now()
 	resp, err := retryDo(l, client, req)
 	if err != nil {
-		return errors.ErrSendingMetricsToServer
+		return myErrors.ErrSendingMetricsToServer
 	}
 	defer resp.Body.Close()
 
@@ -239,12 +260,12 @@ func sendMetricaToServerBatchgzip(l logger, ms MetricsGetter, serverURL string, 
 		_, err = buf.ReadFrom(resp.Body)
 		if err != nil {
 			l.Error("cannot read responce body")
-			return errors.ErrGettingAnswerFromServer
+			return myErrors.ErrGettingAnswerFromServer
 		}
 		data, err := decompress(buf.Bytes())
 		if err != nil {
 			l.Error("cannot decompress responce body")
-			return errors.ErrGettingAnswerFromServer
+			return myErrors.ErrGettingAnswerFromServer
 		}
 		l.Info("json data from responce", "string representation", string(data), "duration", time.Since(start))
 	// get uncompressed data from server
@@ -253,7 +274,7 @@ func sendMetricaToServerBatchgzip(l logger, ms MetricsGetter, serverURL string, 
 		_, err = buf.ReadFrom(resp.Body)
 		if err != nil {
 			l.Error("cannot read responce body")
-			return errors.ErrGettingAnswerFromServer
+			return myErrors.ErrGettingAnswerFromServer
 		}
 		l.Info("json data from responce", "string representation", buf.String(), "duration", time.Since(start))
 	default:
@@ -329,15 +350,15 @@ func collectMetrics(pollCount int64) (MetricsAddGetter, error) {
 
 	err := jms.AddPollCount(pollCount)
 	if err != nil {
-		return jms, errors.ErrAddPollCount
+		return jms, myErrors.ErrAddPollCount
 	}
 	err = jms.AddData(collectRuntimeMetrics())
 	if err != nil {
-		return jms, errors.ErrAddData
+		return jms, myErrors.ErrAddData
 	}
 	err = jms.AddData(collectOtherMetrics())
 	if err != nil {
-		return jms, errors.ErrAddData
+		return jms, myErrors.ErrAddData
 	}
 
 	return jms, nil
@@ -500,7 +521,7 @@ POLLING:
 			l.Error("Error collect metrics")
 		}
 		if len(dataChan) == cap(dataChan) {
-			l.Error("Error internal commnication", "error", errors.ErrChannelFull.Error())
+			l.Error("Error internal commnication", "error", myErrors.ErrChannelFull.Error())
 		}
 		dataChan <- ms
 		pollCounter += 1

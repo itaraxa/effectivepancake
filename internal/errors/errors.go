@@ -26,4 +26,5 @@ var (
 	ErrSendingMetricsToServer = errors.New("error in services.SendMetricsToServer")
 	ErrAddPollCount           = errors.New("error adding pollCount into an instance of the models.Metrics")
 	ErrAddData                = errors.New("error adding data into an instance of the models.Metrics")
+	ErrNoMetrics              = errors.New("GetData() didn't return any metrics")
 )
