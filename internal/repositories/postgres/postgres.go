@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -39,7 +40,7 @@ Returns:
 func NewPostgresRepository(ctx context.Context, databaseURL string) (*PostgresRepository, error) {
 	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
-		return &PostgresRepository{}, err
+		return nil, err
 	}
 
 	ctxWithTimeout, cancelWithTimeout := context.WithTimeout(ctx, 5*time.Second)
@@ -47,7 +48,7 @@ func NewPostgresRepository(ctx context.Context, databaseURL string) (*PostgresRe
 
 	err = prepareTablesContext(ctxWithTimeout, db)
 	if err != nil {
-		return &PostgresRepository{}, fmt.Errorf("cannot create tables in database storage: %w", err)
+		return nil, fmt.Errorf("cannot create tables in database storage: %w", err)
 	}
 
 	return &PostgresRepository{db: db}, nil
@@ -104,7 +105,6 @@ func (pr *PostgresRepository) UpdateGauge(ctx context.Context, metricName string
 
 	_, err := pr.db.ExecContext(ctx, "INSERT INTO gauges (metric_id, metric_value) VALUES ($1, $2);", metricName, value)
 	if err != nil {
-		fmt.Println(err.Error())
 		return err
 	}
 	return nil
@@ -183,7 +183,7 @@ func (pr *PostgresRepository) AddCounter(ctx context.Context, metricName string,
 	err = tx.QueryRowContext(ctx, "SELECT metric_delta FROM counters WHERE metric_id = $1 ORDER BY metric_timestamp DESC LIMIT 1;", metricName).Scan(&currentDelta)
 	if err != nil {
 		// delta-value not in db
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			_, err = tx.ExecContext(ctx, "INSERT INTO counters (metric_id, metric_delta, metric_timestamp) VALUES ($1, $2, $3);", metricName, delta, time.Now())
 			if err != nil {
 				return fmt.Errorf("cannot insert new record: %w", err)
@@ -233,7 +233,7 @@ func (pr *PostgresRepository) AddBatchCounter(ctx context.Context, metrics []str
 		err = tx.QueryRowContext(ctx, "SELECT metric_delta FROM counters WHERE metric_id = $1 ORDER BY metric_timestamp DESC LIMIT 1;", metric.MetricName).Scan(&currentDelta)
 		if err != nil {
 			// delta-value not in db
-			if err == sql.ErrNoRows {
+			if errors.Is(err, sql.ErrNoRows) {
 				_, err = tx.ExecContext(ctx, "INSERT INTO counters (metric_id, metric_delta, metric_timestamp) VALUES ($1, $2, $3);", metric.MetricName, metric.MetricDelta, time.Now())
 				if err != nil {
 					return fmt.Errorf("cannot insert new record: %w", err)
@@ -407,7 +407,6 @@ func (pr *PostgresRepository) String(ctx context.Context) string {
 	s := ""
 	metrics, err := pr.GetAllMetrics(ctx)
 	if err != nil {
-		fmt.Printf("error getting metrics from postgres storage: %v", err.Error())
 		return ""
 	}
 	gauges := metrics.(struct {
@@ -489,7 +488,6 @@ func (pr *PostgresRepository) HTML(ctx context.Context) string {
 
 	metrics, err := pr.GetAllMetrics(ctx)
 	if err != nil {
-		fmt.Printf("error getting metrics from postgres storage: %v", err.Error())
 		return ""
 	}
 	gauges := metrics.(struct {

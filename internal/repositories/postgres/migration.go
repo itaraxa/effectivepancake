@@ -29,7 +29,10 @@ Returns:
 	error: nil or an error that occurred while processing the request
 */
 func prepareTablesContext(ctx context.Context, db *sql.DB) error {
-	files, _ := migrationFiles.ReadDir("migrations")
+	files, err := migrationFiles.ReadDir("migrations")
+	if err != nil {
+		return fmt.Errorf("reading migration files error: %w", err)
+	}
 	for _, file := range files {
 		content, _ := migrationFiles.ReadFile("migrations/" + file.Name())
 		if _, err := db.ExecContext(ctx, string(content)); err != nil {
