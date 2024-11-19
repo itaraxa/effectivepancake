@@ -2,10 +2,11 @@ package memstorage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
-	"github.com/itaraxa/effectivepancake/internal/errors"
+	myErrors "github.com/itaraxa/effectivepancake/internal/errors"
 )
 
 // Структура для хранения метрик в памяти
@@ -40,10 +41,18 @@ func (m *MemStorage) UpdateBatchGauge(ctx context.Context, metrics []struct {
 	MetricName  string
 	MetricValue *float64
 }) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var updateErr error
+
 	for _, metric := range metrics {
+		if metric.MetricValue == nil {
+			updateErr = errors.Join(updateErr, fmt.Errorf("nil value in metrics[%s]", metric.MetricName))
+		}
 		m.Gauge[metric.MetricName] = *metric.MetricValue
 	}
-	return nil
+	return updateErr
 }
 
 /*
@@ -71,14 +80,22 @@ func (m *MemStorage) AddBatchCounter(ctx context.Context, metrics []struct {
 	MetricName  string
 	MetricDelta *int64
 }) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var addError error
+
 	for _, metric := range metrics {
+		if metric.MetricDelta == nil {
+			addError = errors.Join(addError, fmt.Errorf("nil delta in metrics[%s]", metric.MetricName))
+		}
 		if currentDelta, ok := m.Counter[metric.MetricName]; ok {
 			m.Counter[metric.MetricName] = currentDelta + *metric.MetricDelta
 		} else {
 			m.Counter[metric.MetricName] = *metric.MetricDelta
 		}
 	}
-	return nil
+	return addError
 }
 
 /*
@@ -101,19 +118,19 @@ func (m *MemStorage) GetMetrica(ctx context.Context, metricaType string, metrica
 	switch metricaType {
 	case "gauge":
 		if _, ok := m.Gauge[metricaName]; !ok {
-			return nil, errors.ErrMetricaNotFaund
+			return nil, myErrors.ErrMetricaNotFaund
 		}
 		return m.Gauge[metricaName], nil
 
 	case "counter":
 		if _, ok := m.Counter[metricaName]; !ok {
-			return nil, errors.ErrMetricaNotFaund
+			return nil, myErrors.ErrMetricaNotFaund
 		}
 		return m.Counter[metricaName], nil
 
 	default:
 		// case with uncorrect type of metrica
-		return nil, errors.ErrMetricaNotFaund
+		return nil, myErrors.ErrMetricaNotFaund
 	}
 }
 
@@ -251,6 +268,9 @@ func NewMemStorage() *MemStorage {
 }
 
 func (m *MemStorage) PingContext(ctx context.Context) error {
+	if m.Counter == nil || m.Gauge == nil {
+		return myErrors.MemStorageNotInitilized
+	}
 	return nil
 }
 
