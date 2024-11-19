@@ -169,9 +169,13 @@ Returns:
 	error: nil or error, if occured
 */
 func WriteMetricsWithTimestamp(ctx context.Context, mg MetricGetter, dst io.Writer) error {
+	var err error
 	blob := make(map[string]interface{})
 	blob["timestamp"] = time.Now()
-	blob["metrics"], _ = mg.GetAllMetrics(ctx)
+	blob["metrics"], err = mg.GetAllMetrics(ctx)
+	if err != nil {
+		return err
+	}
 
 	data, err := json.MarshalIndent(blob, "\t", "\t")
 	if err != nil {
