@@ -32,9 +32,9 @@ func PingDB(ctx context.Context, l logger, s storagChecker) http.HandlerFunc {
 		}
 		l.Info("received a request to ping db-storage")
 		w.Header().Set("Content-Type", "text/html")
-		ctx3s, cancel3s := context.WithTimeout(ctx, 3*time.Second)
-		defer cancel3s()
-		if err := services.CheckConnectionStorage(ctx3s, l, s); err != nil {
+		ctxWithTimeout, cancelWithTimeout := context.WithTimeout(ctx, 3*time.Second)
+		defer cancelWithTimeout()
+		if err := services.CheckConnectionStorage(ctxWithTimeout, l, s); err != nil {
 			l.Error("error connection to storage", "error", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 		} else {

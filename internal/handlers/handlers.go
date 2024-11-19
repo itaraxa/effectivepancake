@@ -140,8 +140,8 @@ Returns:
 */
 func JSONGetMetrica(ctx context.Context, s metricGetter, l logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		ctx5s, cancel5s := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel5s()
+		ctxWithTimeout, cancelWithTimeout := context.WithTimeout(ctx, 5*time.Second)
+		defer cancelWithTimeout()
 		// Checks
 		if req.Method != http.MethodPost {
 			http.Error(w, "Only POST request allowed", http.StatusMethodNotAllowed)
@@ -164,7 +164,7 @@ func JSONGetMetrica(ctx context.Context, s metricGetter, l logger) http.HandlerF
 			return
 		}
 		l.Info("received a request to get metrica in JSON", "type", jm.GetMetricaType(), "name", jm.GetMetricaName())
-		valueFromStorage, err := s.GetMetrica(ctx5s, jm.GetMetricaType(), jm.GetMetricaName())
+		valueFromStorage, err := s.GetMetrica(ctxWithTimeout, jm.GetMetricaType(), jm.GetMetricaName())
 		if err != nil && errors.Is(err, myErrors.ErrMetricaNotFaund) {
 			w.WriteHeader(http.StatusNotFound)
 			l.Error("cannot get metrica", "type", jm.GetMetricaType(), "name", jm.GetMetricaName(), "error", err.Error())

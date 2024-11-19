@@ -101,9 +101,9 @@ func (sa *ServerApp) Run() {
 	// если воостанавливаем метрики из файла, то предварительно очищаем хранилище
 	if sa.config.Restore {
 		sa.logger.Info("clear storage")
-		ctx3s, cancel3s := context.WithTimeout(ctx, 3*time.Second)
-		defer cancel3s()
-		err := sa.storage.Clear(ctx3s)
+		ctxWithTimeout, cancelWithTimeout := context.WithTimeout(ctx, 3*time.Second)
+		defer cancelWithTimeout()
+		err := sa.storage.Clear(ctxWithTimeout)
 		if err != nil {
 			sa.logger.Error("cleaning storage before metrics loading from file", "error", err.Error())
 		}
@@ -177,9 +177,9 @@ func (sa *ServerApp) Run() {
 
 	// stopping http server
 	<-stopServerChan
-	ctx3s, cancel3s := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel3s()
-	err := server.Shutdown(ctx3s)
+	ctxWithTimeout, cancelWithTimeout := context.WithTimeout(ctx, 3*time.Second)
+	defer cancelWithTimeout()
+	err := server.Shutdown(ctxWithTimeout)
 	if err != nil {
 		sa.logger.Fatal("stopping server", "error", err.Error())
 	}

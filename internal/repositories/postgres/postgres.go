@@ -42,10 +42,10 @@ func NewPostgresRepository(ctx context.Context, databaseURL string) (*PostgresRe
 		return &PostgresRepository{}, err
 	}
 
-	ctx5s, cancel5s := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel5s()
+	ctxWithTimeout, cancelWithTimeout := context.WithTimeout(ctx, 5*time.Second)
+	defer cancelWithTimeout()
 
-	err = prepareTablesContext(ctx5s, db)
+	err = prepareTablesContext(ctxWithTimeout, db)
 	if err != nil {
 		return &PostgresRepository{}, fmt.Errorf("cannot create tables in database storage: %w", err)
 	}

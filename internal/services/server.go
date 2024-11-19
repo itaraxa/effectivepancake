@@ -347,16 +347,16 @@ func JSONUpdateBatchMetrica(ctx context.Context, l logger, jmqs []JSONMetricaQue
 	}
 	l.Debug("get batch for load", "gauges", len(gaugeBatch), "counters", len(counterBatch))
 
-	ctx3s, cancel3s := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel3s()
+	ctxWithTimeout, cancelWithTimeout := context.WithTimeout(ctx, 3*time.Second)
+	defer cancelWithTimeout()
 
-	err := retry(func() error { return mbu.UpdateBatchGauge(ctx3s, gaugeBatch) })
+	err := retry(func() error { return mbu.UpdateBatchGauge(ctxWithTimeout, gaugeBatch) })
 	if err != nil {
 		l.Error("updating gauge batch", "error", err.Error())
 		return err
 	}
 
-	err = retry(func() error { return mbu.AddBatchCounter(ctx3s, counterBatch) })
+	err = retry(func() error { return mbu.AddBatchCounter(ctxWithTimeout, counterBatch) })
 	if err != nil {
 		l.Error("updating counter batch", "error", err.Error())
 		return err
