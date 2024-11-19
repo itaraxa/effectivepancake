@@ -27,7 +27,6 @@ Returns:
 func PingDB(ctx context.Context, l logger, s storagChecker) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		l.Info("received a request to ping db-storage")
-		w.Header().Set("Content-Type", "text/html")
 		ctxWithTimeout, cancelWithTimeout := context.WithTimeout(ctx, 3*time.Second)
 		defer cancelWithTimeout()
 		if err := services.CheckConnectionStorage(ctxWithTimeout, l, s); err != nil {

@@ -79,7 +79,8 @@ func GetAllCurrentMetrics(ctx context.Context, s metricPrinter, l logger) http.H
 
 		_, err := w.Write([]byte(s.HTML(ctx)))
 		if err != nil {
-			l.Error("cannot write HTML to response body")
+			http.Error(w, "cannot write HTML to response body", http.StatusNoContent)
+			l.Error("cannot write HTML to response body", "error", err.Error())
 		}
 	}
 }
@@ -100,23 +101,37 @@ Returns:
 func GetMetrica(ctx context.Context, s metricGetter, l logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
-		l.Info("received a request to get metrica", "type", chi.URLParam(req, "type"), "name", chi.URLParam(req, "name"))
-		v, err := s.GetMetrica(ctx, chi.URLParam(req, "type"), chi.URLParam(req, "name"))
+		mType := chi.URLParam(req, "type")
+		mName := chi.URLParam(req, "name")
+		l.Info("received a request to get metrica", "type", mType, "name", mName)
+		v, err := s.GetMetrica(ctx, mType, mName)
 		if err != nil {
 			w.WriteHeader(http.StatusNotFound)
-			l.Error("cannot get metrica", "type", chi.URLParam(req, "type"), "name", chi.URLParam(req, "name"), "error", err.Error())
+			l.Error("cannot get metrica", "type", mType, "name", mName, "error", err.Error())
 			return
 		}
 		w.WriteHeader(http.StatusOK)
 
 		res := ""
-		switch chi.URLParam(req, "type") {
+		switch mType {
 		case gauge:
-			res = fmt.Sprint(v.(float64))
+			if value, ok := v.(float64); ok {
+				res = fmt.Sprint(value)
+			} else {
+				l.Error("type assertions -> float64", "value", v)
+			}
 		case counter:
-			res = fmt.Sprint(v.(int64))
+			if delta, ok := v.(int64); ok {
+				res = fmt.Sprint(delta)
+			} else {
+				l.Error("type assertions -> int64", "value", v)
+			}
 		}
-		_, _ = w.Write([]byte(res))
+		_, err = w.Write([]byte(res))
+		if err != nil {
+			http.Error(w, "cannot write to response body", http.StatusNoContent)
+			l.Error("cannot write to response body", "error", err.Error())
+		}
 	}
 }
 
@@ -169,11 +184,17 @@ func JSONGetMetrica(ctx context.Context, s metricGetter, l logger) http.HandlerF
 		// Type switching
 		switch jm.GetMetricaType() {
 		case gauge:
-			t := valueFromStorage.(float64)
-			jm.Value = &t
+			if t, ok := valueFromStorage.(float64); ok {
+				jm.Value = &t
+			} else {
+				l.Error("type assertions -> float64", "value", valueFromStorage)
+			}
 		case counter:
-			t := valueFromStorage.(int64)
-			jm.Delta = &t
+			if t, ok := valueFromStorage.(int64); ok {
+				jm.Delta = &t
+			} else {
+				l.Error("type assertion -> int64", "value", valueFromStorage)
+			}
 		}
 
 		// Write response
@@ -252,7 +273,7 @@ func PostUpdateHandler(ctx context.Context, l logger, s metricUpdater) http.Hand
 		}
 
 		// Response
-		w.Header().Set("Content-Type", "text/html")
+		// w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
 	}
 }
@@ -337,18 +358,30 @@ func PostJSONUpdateHandler(ctx context.Context, l logger, s metricStorager) http
 		resp := jm
 		switch jm.GetMetricaType() {
 		case gauge:
-			g, _ := value.(float64)
-			resp.Value = &g
+			if g, ok := value.(float64); ok {
+				resp.Value = &g
+			} else {
+				l.Error("type assertion -> float64", "value", value)
+			}
 		case counter:
 			c, _ := value.(int64)
 			resp.Delta = &c
+			if c, ok := value.(int64); ok {
+				resp.Delta = &c
+			} else {
+				l.Error("type assertion -> int64", "value", value)
+			}
 		}
 
 		body, _ := json.Marshal(resp)
 
 		w.Header().Set("Content-Type", "applicttion/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(body)
+		_, err = w.Write(body)
+		if err != nil {
+			http.Error(w, "cannot write to response body", http.StatusNoContent)
+			l.Error("cannot write to response body", "error", err.Error())
+		}
 	}
 }
 
@@ -400,6 +433,10 @@ func PostJSONUpdateBatchHandler(ctx context.Context, l logger, s metricStorager)
 
 		w.Header().Set("Content-Type", "applicttion/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(""))
+		_, err = w.Write([]byte(""))
+		if err != nil {
+			http.Error(w, "cannot write to response body", http.StatusNoContent)
+			l.Error("cannot write to response body", "error", err.Error())
+		}
 	}
 }
