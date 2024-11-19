@@ -542,25 +542,40 @@ REPORTING:
 			switch {
 			case conf.ReportMode == `json` && conf.Compress == `gzip` && !conf.Batch:
 				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
-					_ = sendMetricaToServerJSONgzip(l, <-dataChan, config.AddressServer, client)
+					err := sendMetricaToServerJSONgzip(l, <-dataChan, config.AddressServer, client)
+					if err != nil {
+						l.Error("sending gzipped json metrica", "error", err.Error())
+					}
 				}(l, dataChan, conf, client)
 			case conf.ReportMode == `json` && conf.Compress == `none` && !conf.Batch:
 				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
-					_ = sendMetricaToServerJSON(l, <-dataChan, config.AddressServer, client)
+					err := sendMetricaToServerJSON(l, <-dataChan, config.AddressServer, client)
+					if err != nil {
+						l.Error("sending nongzipped json metrica", "error", err.Error())
+					}
 				}(l, dataChan, conf, client)
 			case conf.ReportMode == `raw` && !conf.Batch:
 				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
-					_ = sendMetricsToServerQueryStr(l, <-dataChan, config.AddressServer, client)
+					err := sendMetricsToServerQueryStr(l, <-dataChan, config.AddressServer, client)
+					if err != nil {
+						l.Error("sending query string metrica", "error", err.Error())
+					}
 				}(l, dataChan, conf, client)
 
 			case conf.Batch && conf.Compress == `none`:
 				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
-					_ = sendMetricaToServerBatch(l, <-dataChan, config.AddressServer, client)
+					err := sendMetricaToServerBatch(l, <-dataChan, config.AddressServer, client)
+					if err != nil {
+						l.Error("sending nongzipped batch of metrics", "error", err.Error())
+					}
 				}(l, dataChan, conf, client)
 
 			case conf.Batch && conf.Compress == `gzip`:
 				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
-					_ = sendMetricaToServerBatchgzip(l, <-dataChan, config.AddressServer, client)
+					err := sendMetricaToServerBatchgzip(l, <-dataChan, config.AddressServer, client)
+					if err != nil {
+						l.Error("sending gzipped batch of metrics", "error", err.Error())
+					}
 				}(l, dataChan, conf, client)
 			}
 		}

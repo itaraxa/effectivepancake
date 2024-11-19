@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -78,8 +79,7 @@ func main() {
 	agentConf := config.NewAgentConfig()
 	err := agentConf.ParseFlags()
 	if err != nil {
-		fmt.Println(err)
-		return
+		log.Fatalf("error parsing comandline flags: %v", err.Error())
 	}
 	if agentConf.ShowVersion {
 		fmt.Println(version.AgentVersion)
@@ -88,14 +88,12 @@ func main() {
 
 	err = agentConf.ParseEnv()
 	if err != nil {
-		fmt.Println(err)
-		return
+		log.Fatalf("error parsing environment variables: %v", err.Error())
 	}
 
 	logger, err := logger.NewZapLogger(agentConf.LogLevel)
 	if err != nil {
-		fmt.Println(err)
-		return
+		log.Fatalf("дogger initialization error: %v", err.Error())
 	}
 	defer logger.Sync()
 	myClient := &http.Client{
