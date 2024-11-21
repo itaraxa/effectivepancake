@@ -3,6 +3,7 @@ package services
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -37,24 +38,26 @@ func sendMetricsToServerQueryStr(l logger, ms MetricsGetter, serverURL string, c
 	for _, m := range mData {
 		queryString := ""
 		if m.MType == "gauge" {
-			queryString = fmt.Sprintf("http://%s/update/%s/%s/%f", serverURL, m.MType, m.ID, *m.Value)
+			// queryString = fmt.Sprintf("http://%s/update/%s/%s/%f", serverURL, m.MType, m.ID, *m.Value)
+			queryString = createURL(serverURL, m.MType, m.ID, fmt.Sprint(*m.Value))
 		} else if m.MType == "counter" {
-			queryString = fmt.Sprintf("http://%s/update/%s/%s/%d", serverURL, m.MType, m.ID, *m.Delta)
+			// queryString = fmt.Sprintf("http://%s/update/%s/%s/%d", serverURL, m.MType, m.ID, *m.Delta)
+			queryString = createURL(serverURL, m.MType, m.ID, fmt.Sprint(*m.Delta))
 		}
+		l.Debug("query string", "string", queryString)
 		req, err := http.NewRequest(`POST`, queryString, nil)
 		req.Header.Set("Content-Type", "text/plain")
 		if err != nil {
 			l.Error("cannot create request", "error", err.Error())
 			return err
 		}
-		res, err := retryDo(l, client, req)
+		resp, err := retryRequest(func() (*http.Response, error) { return client.Do(req) })
 		if err != nil {
-			l.Error("cannot send metrics to server")
-			return myErrors.ErrSendingMetricsToServer
+			return errors.Join(myErrors.ErrSendingMetricsToServer, err)
 		}
 		// Reading response body to the end to Close body and release the TCP-connection
-		_, err = io.Copy(io.Discard, res.Body)
-		res.Body.Close()
+		_, err = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
 		if err != nil {
 			return err
 		}
@@ -89,15 +92,17 @@ func sendMetricaToServerJSON(l logger, ms MetricsGetter, serverURL string, clien
 		}
 
 		l.Info("json data for send", "string representation", string(jsonDataReq))
-		req, err := http.NewRequest(`POST`, fmt.Sprintf("http://%s/update/", serverURL), bytes.NewBuffer(jsonDataReq))
+		// req, err := http.NewRequest(`POST`, fmt.Sprintf("http://%s/update/", serverURL), bytes.NewBuffer(jsonDataReq))
+		req, err := http.NewRequest(`POST`, createURL(serverURL, `update/`), bytes.NewBuffer(jsonDataReq))
+		l.Debug("query string", "string", createURL(serverURL, `update/`))
 		req.Header.Set("Content-Type", "application/json")
 		if err != nil {
 			l.Error("cannot create request", "error", err.Error())
 			return err
 		}
-		resp, err := retryDo(l, client, req)
+		resp, err := retryRequest(func() (*http.Response, error) { return client.Do(req) })
 		if err != nil {
-			return myErrors.ErrSendingMetricsToServer
+			return errors.Join(myErrors.ErrSendingMetricsToServer, err)
 		}
 		var buf bytes.Buffer
 		_, err = buf.ReadFrom(resp.Body)
@@ -121,15 +126,17 @@ func sendMetricaToServerBatch(l logger, ms MetricsGetter, serverURL string, clie
 		return err
 	}
 	l.Debug("json data for send", "string representation", string(jsonDataReq))
-	req, err := http.NewRequest(`POST`, fmt.Sprintf("http://%s/updates/", serverURL), bytes.NewBuffer(jsonDataReq))
+	// req, err := http.NewRequest(`POST`, fmt.Sprintf("http://%s/updates/", serverURL), bytes.NewBuffer(jsonDataReq))
+	req, err := http.NewRequest(`POST`, createURL(serverURL, `updates/`), bytes.NewBuffer(jsonDataReq))
+	l.Debug("query string", "string", createURL(serverURL, `updates/`))
 	req.Header.Set("Content-Type", "application/json")
 	if err != nil {
 		l.Error("cannot create request", "error", err.Error())
 		return err
 	}
-	resp, err := retryDo(l, client, req)
+	resp, err := retryRequest(func() (*http.Response, error) { return client.Do(req) })
 	if err != nil {
-		return myErrors.ErrSendingMetricsToServer
+		return errors.Join(myErrors.ErrSendingMetricsToServer, err)
 	}
 	var buf bytes.Buffer
 	_, err = buf.ReadFrom(resp.Body)
@@ -174,7 +181,9 @@ func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, c
 			l.Error("cannot compress data", "error", err.Error())
 		}
 		l.Info("json data for send compressd", "string representation", string(jsonDataReq), "compress ratio", float64(len(jsonDataReq))/float64(len(jsonGzipDataReq)))
-		req, err := http.NewRequest(`POST`, fmt.Sprintf("http://%s/update/", serverURL), bytes.NewBuffer(jsonGzipDataReq))
+		// req, err := http.NewRequest(`POST`, fmt.Sprintf("http://%s/update/", serverURL), bytes.NewBuffer(jsonGzipDataReq))
+		req, err := http.NewRequest(`POST`, createURL(serverURL, `update/`), bytes.NewBuffer(jsonGzipDataReq))
+		l.Debug("query string", "string", createURL(serverURL, `update/`))
 		req.Header.Set("Accept-Encoding", "gzip")
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Content-Encoding", "gzip")
@@ -184,9 +193,9 @@ func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, c
 		}
 
 		start := time.Now()
-		resp, err := retryDo(l, client, req)
+		resp, err := retryRequest(func() (*http.Response, error) { return client.Do(req) })
 		if err != nil {
-			return myErrors.ErrSendingMetricsToServer
+			return errors.Join(myErrors.ErrSendingMetricsToServer, err)
 		}
 		defer resp.Body.Close()
 
@@ -224,10 +233,12 @@ func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, c
 func sendMetricaToServerBatchgzip(l logger, ms MetricsGetter, serverURL string, client *http.Client) error {
 	mData := ms.GetData()
 	if len(mData) == 0 {
+		l.Error("no metrics for sending")
 		return myErrors.ErrNoMetrics
 	}
 	jsonDataReq, err := json.Marshal(mData)
 	if err != nil {
+		l.Error("marshalling data error", "error", err.Error())
 		return err
 	}
 	jsonGzipDataReq, err := compress(jsonDataReq)
@@ -237,7 +248,9 @@ func sendMetricaToServerBatchgzip(l logger, ms MetricsGetter, serverURL string, 
 	}
 	l.Debug("json data for send compressd", "string representation", string(jsonDataReq), "compress ratio", float64(len(jsonDataReq))/float64(len(jsonGzipDataReq)))
 
-	req, err := http.NewRequest(`POST`, fmt.Sprintf("http://%s/updates/", serverURL), bytes.NewBuffer(jsonGzipDataReq))
+	// req, err := http.NewRequest(`POST`, fmt.Sprintf("http://%s/updates/", serverURL), bytes.NewBuffer(jsonGzipDataReq))
+	req, err := http.NewRequest(`POST`, createURL(serverURL, `updates/`), bytes.NewBuffer(jsonGzipDataReq))
+	l.Debug("query string", "string", createURL(serverURL, `updates/`))
 	req.Header.Set("Accept-Encoding", "gzip")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Content-Encoding", "gzip")
@@ -247,9 +260,9 @@ func sendMetricaToServerBatchgzip(l logger, ms MetricsGetter, serverURL string, 
 	}
 
 	start := time.Now()
-	resp, err := retryDo(l, client, req)
+	resp, err := retryRequest(func() (*http.Response, error) { return client.Do(req) })
 	if err != nil {
-		return myErrors.ErrSendingMetricsToServer
+		return errors.Join(myErrors.ErrSendingMetricsToServer, err)
 	}
 	defer resp.Body.Close()
 
@@ -282,55 +295,6 @@ func sendMetricaToServerBatchgzip(l logger, ms MetricsGetter, serverURL string, 
 	}
 
 	return nil
-}
-
-/*
-retryDo a retry function for the agent application. Wrapper around the Client.Do()
-
-Args:
-
-	l logger
-	client *http.Client
-	req *http.Request
-
-Returns:
-
-	*http.Response
-	error
-*/
-func retryDo(l logger, client *http.Client, req *http.Request) (*http.Response, error) {
-	// try 0
-	resp, err := client.Do(req)
-	if err == nil {
-		return resp, nil
-	}
-	l.Error("error sending metric to server", "try", 1, "timeout", time.Second*1)
-	time.Sleep(1 * time.Second)
-
-	// try 1
-	resp, err = client.Do(req)
-	if err == nil {
-		return resp, nil
-	}
-	l.Error("error sending metric to server", "try", 2, "timeout", time.Second*3)
-	time.Sleep(3 * time.Second)
-
-	// try 2
-	resp, err = client.Do(req)
-	if err == nil {
-		return resp, nil
-	}
-	l.Error("error sending metric to server", "try", 3, "timeout", time.Second*5)
-	time.Sleep(5 * time.Second)
-
-	// last try
-	resp, err = client.Do(req)
-	if err == nil {
-		return resp, nil
-	}
-	l.Error("error sending metric to server")
-
-	return nil, err
 }
 
 /*

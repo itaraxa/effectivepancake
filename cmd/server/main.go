@@ -81,7 +81,12 @@ func (sa *ServerApp) Run() {
 	go func(cancel context.CancelFunc) {
 		defer cancel()
 		defer func() {
-			_ = sa.storage.Close()
+			err := sa.storage.Close()
+			if err != nil {
+				sa.logger.Error("closing storage", "error", err.Error())
+				return
+			}
+			sa.logger.Info("storage closed")
 		}()
 		<-signalChan
 		sa.logger.Info("stopping server", "cause", "Exit programm because Ctrl+C press")
@@ -93,8 +98,6 @@ func (sa *ServerApp) Run() {
 		}
 		sa.logger.Info("metric data has been saved to the file", "filename", sa.config.FileStoragePath)
 		stopServerChan <- true
-		// _ = sa.storage.Close()
-		// cancel()
 	}(cancel)
 
 	// Restoring metric data from the file

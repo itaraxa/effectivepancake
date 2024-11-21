@@ -361,19 +361,26 @@ func PostJSONUpdateHandler(ctx context.Context, l logger, s metricStorager) http
 			if g, ok := value.(float64); ok {
 				resp.Value = &g
 			} else {
+				http.Error(w, "metrica type error", http.StatusInternalServerError)
 				l.Error("type assertion -> float64", "value", value)
+				return
 			}
 		case counter:
-			c, _ := value.(int64)
-			resp.Delta = &c
 			if c, ok := value.(int64); ok {
 				resp.Delta = &c
 			} else {
+				http.Error(w, "metrica type error", http.StatusInternalServerError)
 				l.Error("type assertion -> int64", "value", value)
+				return
 			}
 		}
 
-		body, _ := json.Marshal(resp)
+		body, err := json.Marshal(resp)
+		if err != nil {
+			http.Error(w, "cannot marshal data to response body", http.StatusNoContent)
+			l.Error("cannot marshal data to response body", "error", err.Error())
+			return
+		}
 
 		w.Header().Set("Content-Type", "applicttion/json")
 		w.WriteHeader(http.StatusOK)
@@ -381,6 +388,7 @@ func PostJSONUpdateHandler(ctx context.Context, l logger, s metricStorager) http
 		if err != nil {
 			http.Error(w, "cannot write to response body", http.StatusNoContent)
 			l.Error("cannot write to response body", "error", err.Error())
+			return
 		}
 	}
 }
@@ -402,6 +410,11 @@ func PostJSONUpdateBatchHandler(ctx context.Context, l logger, s metricStorager)
 	return func(w http.ResponseWriter, req *http.Request) {
 		// Processing
 		var buf bytes.Buffer
+		if req.Body == nil {
+			http.Error(w, "empty request body", http.StatusBadRequest)
+			l.Error("cannot read from request body", "error", "empty request body")
+			return
+		}
 		_, err := buf.ReadFrom(req.Body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -431,12 +444,13 @@ func PostJSONUpdateBatchHandler(ctx context.Context, l logger, s metricStorager)
 			return
 		}
 
-		w.Header().Set("Content-Type", "applicttion/json")
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, err = w.Write([]byte(""))
 		if err != nil {
 			http.Error(w, "cannot write to response body", http.StatusNoContent)
 			l.Error("cannot write to response body", "error", err.Error())
+			return
 		}
 	}
 }

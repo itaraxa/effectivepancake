@@ -117,22 +117,12 @@ func (pr *PostgresRepository) UpdateBatchGauge(ctx context.Context, metrics []st
 	pr.mu.Lock()
 	defer pr.mu.Unlock()
 
-	// init transacion
-	tx, err := pr.db.BeginTx(ctx, nil)
+	var err error
+	tx, txFinish, err := NewTransaction(ctx, nil, pr.db)
 	if err != nil {
 		return fmt.Errorf("cannot start transaction: %w", err)
 	}
-	// rollback on error and commit if all ok
-	defer func() {
-		if p := recover(); p != nil {
-			_ = tx.Rollback()
-			panic(p)
-		} else if err != nil {
-			_ = tx.Rollback()
-		} else {
-			err = tx.Commit()
-		}
-	}()
+	defer txFinish(tx)
 
 	for _, metric := range metrics {
 		_, err := pr.db.ExecContext(ctx, "INSERT INTO gauges (metric_id, metric_value) VALUES ($1, $2);", metric.MetricName, metric.MetricValue)
@@ -161,22 +151,12 @@ func (pr *PostgresRepository) AddCounter(ctx context.Context, metricName string,
 	pr.mu.Lock()
 	defer pr.mu.Unlock()
 
-	// init transaction
-	tx, err := pr.db.BeginTx(ctx, nil)
+	var err error
+	tx, txFinish, err := NewTransaction(ctx, nil, pr.db)
 	if err != nil {
 		return fmt.Errorf("cannot start transaction: %w", err)
 	}
-	// rollback on error and commit if all ok
-	defer func() {
-		if p := recover(); p != nil {
-			_ = tx.Rollback()
-			panic(p)
-		} else if err != nil {
-			_ = tx.Rollback()
-		} else {
-			err = tx.Commit()
-		}
-	}()
+	defer txFinish(tx)
 
 	// check delta-value in db
 	var currentDelta int64
@@ -210,22 +190,12 @@ func (pr *PostgresRepository) AddBatchCounter(ctx context.Context, metrics []str
 	pr.mu.Lock()
 	defer pr.mu.Unlock()
 
-	// init transaction
-	tx, err := pr.db.BeginTx(ctx, nil)
+	var err error
+	tx, txFinish, err := NewTransaction(ctx, nil, pr.db)
 	if err != nil {
 		return fmt.Errorf("cannot start transaction: %w", err)
 	}
-	// rollback on error and commit if all ok
-	defer func() {
-		if p := recover(); p != nil {
-			_ = tx.Rollback()
-			panic(p)
-		} else if err != nil {
-			_ = tx.Rollback()
-		} else {
-			err = tx.Commit()
-		}
-	}()
+	defer txFinish(tx)
 
 	for _, metric := range metrics {
 		// check delta-value in db
@@ -513,4 +483,25 @@ func (pr *PostgresRepository) HTML(ctx context.Context) string {
 </html>
 `
 	return h
+}
+
+/*
+NewTransaction init transaction and create function that apply or rollback changes
+*/
+func NewTransaction(ctx context.Context, txOpts *sql.TxOptions, db *sql.DB) (*sql.Tx, func(tx *sql.Tx), error) {
+	tx, err := db.BeginTx(ctx, txOpts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot start transaction: %w", err)
+	}
+	txFinish := func(tx *sql.Tx) {
+		if p := recover(); p != nil {
+			_ = tx.Rollback()
+			panic(p)
+		} else if err != nil {
+			_ = tx.Rollback()
+		} else {
+			err = tx.Commit()
+		}
+	}
+	return tx, txFinish, nil
 }

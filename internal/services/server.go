@@ -73,7 +73,7 @@ func UpdateMetrica(ctx context.Context, q Querier, s MetricUpdater) error {
 			return myErrors.ErrParseGauge
 		}
 
-		err = retry(func() error { return s.UpdateGauge(ctx, q.GetMetricName(), g) })
+		err = retryQueryToDB(func() error { return s.UpdateGauge(ctx, q.GetMetricName(), g) })
 
 		if err != nil {
 			return myErrors.ErrUpdateGauge
@@ -83,7 +83,7 @@ func UpdateMetrica(ctx context.Context, q Querier, s MetricUpdater) error {
 		if err != nil {
 			return myErrors.ErrParseCounter
 		}
-		err = retry(func() error { return s.AddCounter(ctx, q.GetMetricName(), int64(c)) })
+		err = retryQueryToDB(func() error { return s.AddCounter(ctx, q.GetMetricName(), int64(c)) })
 		if err != nil {
 			return myErrors.ErrAddCounter
 		}
@@ -111,12 +111,12 @@ func JSONUpdateMetrica(ctx context.Context, jmq JSONMetricaQuerier, mu MetricUpd
 	defer cancel1s()
 	switch jmq.GetMetricaType() {
 	case gauge:
-		err := retry(func() error { return mu.UpdateGauge(ctx1s, jmq.GetMetricaName(), *jmq.GetMetricaValue()) })
+		err := retryQueryToDB(func() error { return mu.UpdateGauge(ctx1s, jmq.GetMetricaName(), *jmq.GetMetricaValue()) })
 		if err != nil {
 			return myErrors.ErrUpdateGauge
 		}
 	case counter:
-		err := retry(func() error { return mu.AddCounter(ctx1s, jmq.GetMetricaName(), *jmq.GetMetricaCounter()) })
+		err := retryQueryToDB(func() error { return mu.AddCounter(ctx1s, jmq.GetMetricaName(), *jmq.GetMetricaCounter()) })
 		if err != nil {
 			return myErrors.ErrAddCounter
 		}
@@ -253,7 +253,7 @@ func LoadMetrics(mu MetricUpdater, src io.Reader) (time.Time, error) {
 
 	if gauges, ok := metrics.(map[string]interface{})["gauges"]; ok {
 		for ID, value := range gauges.(map[string]interface{}) {
-			err = retry(func() error { return mu.UpdateGauge(context.TODO(), ID, value.(float64)) })
+			err = retryQueryToDB(func() error { return mu.UpdateGauge(context.TODO(), ID, value.(float64)) })
 			if err != nil {
 				return time.UnixMilli(0), fmt.Errorf("updating gauge %s error: %v", ID, err.Error())
 			}
@@ -263,7 +263,7 @@ func LoadMetrics(mu MetricUpdater, src io.Reader) (time.Time, error) {
 		for ID, delta := range counter.(map[string]interface{}) {
 			// Unmarshall from interface{} to float64 and convert to int64
 			// because json.Unmarshall numbers into float64
-			err = retry(func() error { return mu.AddCounter(context.TODO(), ID, int64(delta.(float64))) })
+			err = retryQueryToDB(func() error { return mu.AddCounter(context.TODO(), ID, int64(delta.(float64))) })
 			if err != nil {
 				return time.UnixMilli(0), fmt.Errorf("updating counter %s error: %v", ID, err.Error())
 			}
@@ -354,13 +354,13 @@ func JSONUpdateBatchMetrica(ctx context.Context, l logger, jmqs []JSONMetricaQue
 	ctxWithTimeout, cancelWithTimeout := context.WithTimeout(ctx, 3*time.Second)
 	defer cancelWithTimeout()
 
-	err := retry(func() error { return mbu.UpdateBatchGauge(ctxWithTimeout, gaugeBatch) })
+	err := retryQueryToDB(func() error { return mbu.UpdateBatchGauge(ctxWithTimeout, gaugeBatch) })
 	if err != nil {
 		l.Error("updating gauge batch", "error", err.Error())
 		return err
 	}
 
-	err = retry(func() error { return mbu.AddBatchCounter(ctxWithTimeout, counterBatch) })
+	err = retryQueryToDB(func() error { return mbu.AddBatchCounter(ctxWithTimeout, counterBatch) })
 	if err != nil {
 		l.Error("updating counter batch", "error", err.Error())
 		return err

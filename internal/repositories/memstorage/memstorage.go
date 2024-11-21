@@ -49,6 +49,7 @@ func (m *MemStorage) UpdateBatchGauge(ctx context.Context, metrics []struct {
 	for _, metric := range metrics {
 		if metric.MetricValue == nil {
 			updateErr = errors.Join(updateErr, fmt.Errorf("nil value in metrics[%s]", metric.MetricName))
+			continue
 		}
 		m.Gauge[metric.MetricName] = *metric.MetricValue
 	}
@@ -88,6 +89,7 @@ func (m *MemStorage) AddBatchCounter(ctx context.Context, metrics []struct {
 	for _, metric := range metrics {
 		if metric.MetricDelta == nil {
 			addError = errors.Join(addError, fmt.Errorf("nil delta in metrics[%s]", metric.MetricName))
+			continue
 		}
 		if currentDelta, ok := m.Counter[metric.MetricName]; ok {
 			m.Counter[metric.MetricName] = currentDelta + *metric.MetricDelta

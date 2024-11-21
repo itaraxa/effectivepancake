@@ -34,7 +34,10 @@ func prepareTablesContext(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("reading migration files error: %w", err)
 	}
 	for _, file := range files {
-		content, _ := migrationFiles.ReadFile("migrations/" + file.Name())
+		content, err := migrationFiles.ReadFile("migrations/" + file.Name())
+		if err != nil {
+			return fmt.Errorf("reading migration file %s error: %w", file.Name(), err)
+		}
 		if _, err := db.ExecContext(ctx, string(content)); err != nil {
 			return fmt.Errorf("preapring database error: %w", err)
 		}
