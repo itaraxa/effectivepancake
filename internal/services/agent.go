@@ -2,8 +2,6 @@ package services
 
 import (
 	"bytes"
-	"crypto/hmac"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -601,51 +599,4 @@ REPORTING:
 			break REPORTING
 		}
 	}
-}
-
-/*
-SignSHA256 calculates an SHA-256 digital signature
-
-Args:
-
-	l logger
-	body io.Reader: the data to be signed
-	key string: the key used for signing
-
-Returns:
-
-	string: SHA-256 digital signature
-	error
-*/
-func SignSHA256(l logger, body io.Reader, key string) (string, error) {
-	if key == `` {
-		l.Debug(`empty key value is set`)
-	}
-
-	h := hmac.New(sha256.New, []byte(key))
-	var data []byte
-	var d int = 0
-	buffer := make([]byte, 1024)
-	for {
-		n, err := body.Read(buffer)
-		if err != nil && err != io.EOF {
-			return ``, fmt.Errorf("sha256 sign error: %w", err)
-		}
-		d += n
-		data = append(data, buffer[:n]...)
-		if err == io.EOF {
-			break
-		}
-	}
-
-	if d == 0 {
-		return ``, fmt.Errorf("sha256 sign error: empty body input")
-	}
-	_, err := h.Write(data)
-	if err != nil {
-		return ``, fmt.Errorf("sha256 sign error: %w", err)
-	}
-	l.Debug(`sha256 sign`, `body`, string(data), `key`, key, `sha256sum`, fmt.Sprintf("%x", h.Sum(nil)))
-
-	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
