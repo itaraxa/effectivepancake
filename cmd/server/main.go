@@ -136,6 +136,9 @@ func (sa *ServerApp) Run() {
 
 	// Add middlewares
 	sa.router.Use(middlewares.LoggerMiddleware(sa.logger))
+	if sa.config.Key != `` {
+		sa.router.Use(middlewares.CheckSignSHA256(sa.logger, sa.config.Key))
+	}
 	sa.router.Use(middlewares.CompressResponceMiddleware(sa.logger))
 	sa.router.Use(middlewares.DecompressRequestMiddleware(sa.logger))
 	sa.router.Use(middlewares.StatMiddleware(sa.logger, 10))

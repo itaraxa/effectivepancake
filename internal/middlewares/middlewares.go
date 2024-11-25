@@ -1,6 +1,7 @@
 package middlewares
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"fmt"
@@ -259,6 +260,59 @@ func SaveStorageToFile(ctx context.Context, l logger, s metricGetter, dst io.Wri
 				}
 				l.Debug("data writed")
 			}
+		})
+	}
+}
+
+/*
+CheckSignSHA256 checks for the presence of a digital signature, and if present, calculates the data’s digital signature and verifies it against the provided one.
+If the digital signature does not matchs, request processing is terminated
+
+Args:
+
+	l logger: object, implemented logger interface
+	key string: key-string for SHA256 digital signature
+
+Returns:
+
+	func(next http.Handler) http.Handler
+*/
+func CheckSignSHA256(l logger, key string) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			expectedSign := r.Header.Get("HashSHA256")
+			if expectedSign == "" {
+				l.Info("request dowsn't have digital signature")
+				next.ServeHTTP(w, r)
+				return
+			}
+			if r.Body != nil {
+				// make a copy of request body
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					http.Error(w, "Error reading request body", http.StatusBadRequest)
+					l.Error("reading request body", "error", err.Error())
+					return
+				}
+				defer r.Body.Close()
+				r.Body = io.NopCloser(bytes.NewReader(body))
+
+				// calc digital signature of body
+				actualSign, err := services.SignSHA256(l, bytes.NewReader(body), key)
+				if err != nil {
+					l.Error("error digital signature calculating", "error", err)
+					http.Error(w, "Error digital signature calculating", http.StatusBadRequest)
+					return
+				}
+				// check signatures
+				if !services.CheckSign(l, expectedSign, actualSign) {
+					l.Error("checking digital signatures", "error", fmt.Sprintf("signatures not equal: expect %s, actual %s", expectedSign, actualSign))
+					http.Error(w, "Error digital signature checking", http.StatusBadRequest)
+					return
+				}
+			}
+
+			next.ServeHTTP(w, r)
 		})
 	}
 }

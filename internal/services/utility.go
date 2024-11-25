@@ -168,16 +168,15 @@ Args:
 Returns:
 
 	bool: result of an exact comparison
-	error: nil or error message
 */
-func CheckSign(l logger, expectedSign string, actualSign string) (bool, error) {
+func CheckSign(l logger, expectedSign string, actualSign string) bool {
 	l.Debug("check digit signatures", "expected", expectedSign, "actual", actualSign)
 	if expectedSign != actualSign {
 		l.Error("check signatures", "error", fmt.Sprintf("expected signature %s not equal actual signature %s", expectedSign, actualSign))
-		return false, fmt.Errorf("checking signatures error: not equal")
+		return false
 	}
 	l.Info("check signatures - success")
-	return true, nil
+	return true
 }
 
 /*
