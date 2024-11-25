@@ -69,6 +69,7 @@ func (sa *ServerApp) Run() {
 		"Storing metrica file", sa.config.FileStoragePath,
 		"Store interval", time.Duration(sa.config.StoreInterval)*time.Second,
 		"Database DSN", sa.config.DatabaseDSN,
+		"Key", sa.config.Key,
 	)
 	defer sa.logger.Info("server stopped")
 
