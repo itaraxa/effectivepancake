@@ -316,3 +316,59 @@ func CheckSignSHA256(l logger, key string) func(next http.Handler) http.Handler 
 		})
 	}
 }
+
+/*
+Helper struct for SignSHA256 function
+*/
+type responseWriterInterceptor struct {
+	http.ResponseWriter
+	writer io.Writer
+}
+
+func (rw *responseWriterInterceptor) Write(b []byte) (int, error) {
+	return rw.writer.Write(b)
+}
+
+/*
+SignSHA256 middleware ыigns the response body using the SHA-256 algorithm
+
+Args:
+
+	l logger
+	key string
+
+Returns:
+
+	func(next http.Handler) http.Handler
+*/
+func SignSHA256(l logger, key string) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("HashSHA256") == "" {
+				l.Info("response willn't signed")
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// duplicate responce writer
+			buf := &bytes.Buffer{}
+			mw := io.MultiWriter(w, buf)
+
+			responseRecorder := &responseWriterInterceptor{
+				ResponseWriter: w,
+				writer:         mw,
+			}
+			next.ServeHTTP(responseRecorder, r)
+
+			sign, err := services.SignSHA256(l, buf, key)
+			if err != nil {
+				l.Error("response signing", "error", err.Error())
+				http.Error(w, "Error signing response", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("HashSHA256", sign)
+			l.Info("response signed successfully", "signature", w.Header().Get("HashSHA256"))
+
+		})
+	}
+}

@@ -138,6 +138,7 @@ func (sa *ServerApp) Run() {
 	sa.router.Use(middlewares.LoggerMiddleware(sa.logger))
 	if sa.config.Key != `` {
 		sa.router.Use(middlewares.CheckSignSHA256(sa.logger, sa.config.Key))
+		sa.router.Use(middlewares.SignSHA256(sa.logger, sa.config.Key))
 	}
 	sa.router.Use(middlewares.CompressResponceMiddleware(sa.logger))
 	sa.router.Use(middlewares.DecompressRequestMiddleware(sa.logger))

@@ -221,7 +221,7 @@ func SignSHA256(l logger, body io.Reader, key string) (string, error) {
 	if err != nil {
 		return ``, fmt.Errorf("sha256 sign error: %w", err)
 	}
-	l.Debug(`sha256 sign`, `body`, string(data), `key`, key, `sha256sum`, fmt.Sprintf("%x", h.Sum(nil)))
+	l.Debug(`sha256 sign`, `body`, fmt.Sprintf("%x", data), `key`, key, `sha256sum`, fmt.Sprintf("%x", h.Sum(nil)))
 
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
