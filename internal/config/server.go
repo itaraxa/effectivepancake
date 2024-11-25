@@ -17,6 +17,7 @@ type ServerConfig struct {
 	FileStoragePath string
 	Restore         bool
 	DatabaseDSN     string
+	Key             string
 }
 
 /*
@@ -35,6 +36,7 @@ func NewServerConfig() *ServerConfig {
 		Endpoint:    `localhost:8080`,
 		LogLevel:    `INFO`,
 		ShowVersion: false,
+		Key:         ``,
 	}
 }
 
@@ -57,6 +59,7 @@ func (sc *ServerConfig) ParseFlags() error {
 	flag.StringVar(&sc.FileStoragePath, `f`, `metrics.dat`, `File path for saving metrics. Environment variable FILE_STORAGE_PATH`)
 	flag.StringVar(&sc.DatabaseDSN, `d`, ``, `database connection string. Environment variable DATABASE_DSN`)
 	flag.IntVar(&sc.StoreInterval, `i`, 300, `Time interval after which the current metrics are saved to a file. If set to 0, data is saved synchronously. Environment variable STORE_INTERVAL`)
+	flag.StringVar(&sc.Key, `k`, ``, `Set a key-string for checking signed data. Environment variable KEY`)
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Version: %s\nUsage of %s\n", version.ServerVersion, os.Args[0])
 		flag.PrintDefaults()
@@ -106,5 +109,10 @@ func (sc *ServerConfig) ParseEnv() error {
 	if database, ok := os.LookupEnv(`DATABASE_DSN`); ok {
 		sc.DatabaseDSN = database
 	}
+	k, ok := os.LookupEnv(`KEY`)
+	if ok {
+		sc.Key = k
+	}
+
 	return nil
 }

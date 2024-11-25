@@ -80,7 +80,7 @@ Returns:
 
 	error: nil or error, encountered during sending data
 */
-func sendMetricaToServerJSON(l logger, ms MetricsGetter, serverURL string, client *http.Client) error {
+func sendMetricaToServerJSON(l logger, ms MetricsGetter, serverURL string, client *http.Client, key string) error {
 	mData := ms.GetData()
 	if len(mData) == 0 {
 		return myErrors.ErrNoMetrics
@@ -92,13 +92,20 @@ func sendMetricaToServerJSON(l logger, ms MetricsGetter, serverURL string, clien
 		}
 
 		l.Info("json data for send", "string representation", string(jsonDataReq))
-		// req, err := http.NewRequest(`POST`, fmt.Sprintf("http://%s/update/", serverURL), bytes.NewBuffer(jsonDataReq))
 		req, err := http.NewRequest(`POST`, createURL(serverURL, `update/`), bytes.NewBuffer(jsonDataReq))
 		l.Debug("query string", "string", createURL(serverURL, `update/`))
 		req.Header.Set("Content-Type", "application/json")
 		if err != nil {
 			l.Error("cannot create request", "error", err.Error())
 			return err
+		}
+		if key != `` {
+			signature, err := SignSHA256(l, bytes.NewReader(jsonDataReq), key)
+			if err != nil {
+				l.Error("cannot sign data", "error", err.Error())
+				return err
+			}
+			req.Header.Set(`HashSHA256`, signature)
 		}
 		resp, err := retryRequest(func() (*http.Response, error) { return client.Do(req) })
 		if err != nil {
@@ -116,7 +123,7 @@ func sendMetricaToServerJSON(l logger, ms MetricsGetter, serverURL string, clien
 	return nil
 }
 
-func sendMetricaToServerBatch(l logger, ms MetricsGetter, serverURL string, client *http.Client) error {
+func sendMetricaToServerBatch(l logger, ms MetricsGetter, serverURL string, client *http.Client, key string) error {
 	mData := ms.GetData()
 	if len(mData) == 0 {
 		return myErrors.ErrNoMetrics
@@ -126,13 +133,20 @@ func sendMetricaToServerBatch(l logger, ms MetricsGetter, serverURL string, clie
 		return err
 	}
 	l.Debug("json data for send", "string representation", string(jsonDataReq))
-	// req, err := http.NewRequest(`POST`, fmt.Sprintf("http://%s/updates/", serverURL), bytes.NewBuffer(jsonDataReq))
 	req, err := http.NewRequest(`POST`, createURL(serverURL, `updates/`), bytes.NewBuffer(jsonDataReq))
 	l.Debug("query string", "string", createURL(serverURL, `updates/`))
 	req.Header.Set("Content-Type", "application/json")
 	if err != nil {
 		l.Error("cannot create request", "error", err.Error())
 		return err
+	}
+	if key != `` {
+		signature, err := SignSHA256(l, bytes.NewReader(jsonDataReq), key)
+		if err != nil {
+			l.Error("cannot sign data", "error", err.Error())
+			return err
+		}
+		req.Header.Set(`HashSHA256`, signature)
 	}
 	resp, err := retryRequest(func() (*http.Response, error) { return client.Do(req) })
 	if err != nil {
@@ -165,7 +179,7 @@ Returns:
 
 	error: nil or error, encountered during sending data
 */
-func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, client *http.Client) error {
+func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, client *http.Client, key string) error {
 	mData := ms.GetData()
 	if len(mData) == 0 {
 		return myErrors.ErrNoMetrics
@@ -181,7 +195,6 @@ func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, c
 			l.Error("cannot compress data", "error", err.Error())
 		}
 		l.Info("json data for send compressd", "string representation", string(jsonDataReq), "compress ratio", float64(len(jsonDataReq))/float64(len(jsonGzipDataReq)))
-		// req, err := http.NewRequest(`POST`, fmt.Sprintf("http://%s/update/", serverURL), bytes.NewBuffer(jsonGzipDataReq))
 		req, err := http.NewRequest(`POST`, createURL(serverURL, `update/`), bytes.NewBuffer(jsonGzipDataReq))
 		l.Debug("query string", "string", createURL(serverURL, `update/`))
 		req.Header.Set("Accept-Encoding", "gzip")
@@ -191,7 +204,14 @@ func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, c
 			l.Error("cannot create request", "error", err.Error())
 			return err
 		}
-
+		if key != `` {
+			signature, err := SignSHA256(l, bytes.NewReader(jsonGzipDataReq), key)
+			if err != nil {
+				l.Error("cannot sign data", "error", err.Error())
+				return err
+			}
+			req.Header.Set(`HashSHA256`, signature)
+		}
 		start := time.Now()
 		resp, err := retryRequest(func() (*http.Response, error) { return client.Do(req) })
 		if err != nil {
@@ -230,7 +250,7 @@ func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, c
 	return nil
 }
 
-func sendMetricaToServerBatchgzip(l logger, ms MetricsGetter, serverURL string, client *http.Client) error {
+func sendMetricaToServerBatchgzip(l logger, ms MetricsGetter, serverURL string, client *http.Client, key string) error {
 	mData := ms.GetData()
 	if len(mData) == 0 {
 		l.Error("no metrics for sending")
@@ -254,6 +274,14 @@ func sendMetricaToServerBatchgzip(l logger, ms MetricsGetter, serverURL string, 
 	req.Header.Set("Accept-Encoding", "gzip")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Content-Encoding", "gzip")
+	if key != `` {
+		signature, err := SignSHA256(l, bytes.NewReader(jsonGzipDataReq), key)
+		if err != nil {
+			l.Error("cannot sign data", "error", err.Error())
+			return err
+		}
+		req.Header.Set(`HashSHA256`, signature)
+	}
 	if err != nil {
 		l.Error("cannot create request", "error", err.Error())
 		return err
@@ -527,14 +555,14 @@ REPORTING:
 			switch {
 			case conf.ReportMode == `json` && conf.Compress == `gzip` && !conf.Batch:
 				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
-					err := sendMetricaToServerJSONgzip(l, <-dataChan, config.AddressServer, client)
+					err := sendMetricaToServerJSONgzip(l, <-dataChan, config.AddressServer, client, conf.Key)
 					if err != nil {
 						l.Error("sending gzipped json metrica", "error", err.Error())
 					}
 				}(l, dataChan, conf, client)
 			case conf.ReportMode == `json` && conf.Compress == `none` && !conf.Batch:
 				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
-					err := sendMetricaToServerJSON(l, <-dataChan, config.AddressServer, client)
+					err := sendMetricaToServerJSON(l, <-dataChan, config.AddressServer, client, conf.Key)
 					if err != nil {
 						l.Error("sending nongzipped json metrica", "error", err.Error())
 					}
@@ -549,7 +577,7 @@ REPORTING:
 
 			case conf.Batch && conf.Compress == `none`:
 				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
-					err := sendMetricaToServerBatch(l, <-dataChan, config.AddressServer, client)
+					err := sendMetricaToServerBatch(l, <-dataChan, config.AddressServer, client, conf.Key)
 					if err != nil {
 						l.Error("sending nongzipped batch of metrics", "error", err.Error())
 					}
@@ -557,7 +585,7 @@ REPORTING:
 
 			case conf.Batch && conf.Compress == `gzip`:
 				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
-					err := sendMetricaToServerBatchgzip(l, <-dataChan, config.AddressServer, client)
+					err := sendMetricaToServerBatchgzip(l, <-dataChan, config.AddressServer, client, conf.Key)
 					if err != nil {
 						l.Error("sending gzipped batch of metrics", "error", err.Error())
 					}

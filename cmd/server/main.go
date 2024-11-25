@@ -69,6 +69,7 @@ func (sa *ServerApp) Run() {
 		"Storing metrica file", sa.config.FileStoragePath,
 		"Store interval", time.Duration(sa.config.StoreInterval)*time.Second,
 		"Database DSN", sa.config.DatabaseDSN,
+		"Key", sa.config.Key,
 	)
 	defer sa.logger.Info("server stopped")
 
@@ -135,6 +136,10 @@ func (sa *ServerApp) Run() {
 
 	// Add middlewares
 	sa.router.Use(middlewares.LoggerMiddleware(sa.logger))
+	if sa.config.Key != `` {
+		sa.router.Use(middlewares.CheckSignSHA256(sa.logger, sa.config.Key))
+		sa.router.Use(middlewares.SignSHA256(sa.logger, sa.config.Key))
+	}
 	sa.router.Use(middlewares.CompressResponceMiddleware(sa.logger))
 	sa.router.Use(middlewares.DecompressRequestMiddleware(sa.logger))
 	sa.router.Use(middlewares.StatMiddleware(sa.logger, 10))

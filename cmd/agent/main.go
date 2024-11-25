@@ -40,6 +40,7 @@ func (aa *AgentApp) Run() {
 		"report mode", aa.config.ReportMode,
 		"compress methode", aa.config.Compress,
 		"batch mode", aa.config.Batch,
+		"key", aa.config.Key,
 	)
 	defer aa.logger.Info("Agent stopped")
 

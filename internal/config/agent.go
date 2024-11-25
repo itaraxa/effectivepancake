@@ -19,6 +19,7 @@ type AgentConfig struct {
 	ReportMode     string // json or raw
 	Compress       string // gzip or none
 	Batch          bool
+	Key            string
 }
 
 func NewAgentConfig() *AgentConfig {
@@ -30,6 +31,7 @@ func NewAgentConfig() *AgentConfig {
 		ReportMode:     `json`,
 		Compress:       `gzip`,
 		Batch:          true,
+		Key:            ``,
 	}
 }
 
@@ -41,6 +43,7 @@ func (ac *AgentConfig) ParseFlags() error {
 	flag.StringVar(&ac.ReportMode, `m`, `json`, `Set method to report metrics: json, raw. Environment variable REPORT_METHOD`)
 	flag.StringVar(&ac.Compress, `c`, `gzip`, `Set a data compression method: gzip or none. Environment variable COMPRESS`)
 	var p, r int64
+	flag.StringVar(&ac.Key, `k`, ``, `Set a key-string for signing transmitted data. Environment variable KEY`)
 	flag.Int64Var(&p, `p`, 2, `metrics poll interval, seconds. Environment variable POLL_INTERVAL`)
 	flag.Int64Var(&r, `r`, 10, `metrics report interval, seconds. Environment variable REPORT_INTERVAL`)
 
@@ -117,5 +120,11 @@ func (ac *AgentConfig) ParseEnv() error {
 			ac.Compress = `gzip`
 		}
 	}
+
+	k, ok := os.LookupEnv(`KEY`)
+	if ok {
+		ac.Key = k
+	}
+
 	return nil
 }

@@ -39,6 +39,7 @@ func Test_sendMetricaToServerJSON(t *testing.T) {
 		ms        MetricsGetter
 		serverURL string
 		client    *http.Client
+		key       string
 	}
 	tests := []struct {
 		name    string
@@ -49,7 +50,7 @@ func Test_sendMetricaToServerJSON(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := sendMetricaToServerJSON(tt.args.l, tt.args.ms, tt.args.serverURL, tt.args.client); (err != nil) != tt.wantErr {
+			if err := sendMetricaToServerJSON(tt.args.l, tt.args.ms, tt.args.serverURL, tt.args.client, tt.args.key); (err != nil) != tt.wantErr {
 				t.Errorf("sendMetricaToServerJSON() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -62,6 +63,7 @@ func Test_sendMetricaToServerJSONgzip(t *testing.T) {
 		ms        MetricsGetter
 		serverURL string
 		client    *http.Client
+		key       string
 	}
 	tests := []struct {
 		name    string
@@ -72,7 +74,7 @@ func Test_sendMetricaToServerJSONgzip(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := sendMetricaToServerJSONgzip(tt.args.l, tt.args.ms, tt.args.serverURL, tt.args.client); (err != nil) != tt.wantErr {
+			if err := sendMetricaToServerJSONgzip(tt.args.l, tt.args.ms, tt.args.serverURL, tt.args.client, tt.args.key); (err != nil) != tt.wantErr {
 				t.Errorf("sendMetricaToServerJSONgzip() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
