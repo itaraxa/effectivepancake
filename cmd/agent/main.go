@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -21,7 +22,6 @@ type AgentApp struct {
 	wg         *sync.WaitGroup
 }
 
-// TO-DO: rewrite with interfaces
 func NewAgentApp(logger logger.Logger, httpClient *http.Client, config *config.AgentConfig) *AgentApp {
 	return &AgentApp{
 		logger:     logger,
@@ -38,6 +38,8 @@ func (aa *AgentApp) Run() {
 		"report interval", aa.config.ReportInterval,
 		"log level", aa.config.LogLevel,
 		"report mode", aa.config.ReportMode,
+		"compress methode", aa.config.Compress,
+		"batch mode", aa.config.Batch,
 	)
 	defer aa.logger.Info("Agent stopped")
 
@@ -77,23 +79,21 @@ func main() {
 	agentConf := config.NewAgentConfig()
 	err := agentConf.ParseFlags()
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		log.Fatalf("error parsing comandline flags: %v", err.Error())
 	}
 	if agentConf.ShowVersion {
 		fmt.Println(version.AgentVersion)
-		os.Exit(0)
+		return
 	}
 
 	err = agentConf.ParseEnv()
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		log.Fatalf("error parsing environment variables: %v", err.Error())
 	}
 
 	logger, err := logger.NewZapLogger(agentConf.LogLevel)
 	if err != nil {
-		panic(err)
+		log.Fatalf("дogger initialization error: %v", err.Error())
 	}
 	defer logger.Sync()
 	myClient := &http.Client{

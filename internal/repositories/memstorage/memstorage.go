@@ -1,10 +1,12 @@
 package memstorage
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"sync"
 
-	"github.com/itaraxa/effectivepancake/internal/errors"
+	myErrors "github.com/itaraxa/effectivepancake/internal/errors"
 )
 
 // Структура для хранения метрик в памяти
@@ -26,13 +28,32 @@ Returns:
 
 	error: nil or error of adding counter to the MemStorgage
 */
-func (m *MemStorage) UpdateGauge(metricName string, value float64) error {
+func (m *MemStorage) UpdateGauge(ctx context.Context, metricName string, value float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.Gauge[metricName] = value
 
 	return nil
+}
+
+func (m *MemStorage) UpdateBatchGauge(ctx context.Context, metrics []struct {
+	MetricName  string
+	MetricValue *float64
+}) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var updateErr error
+
+	for _, metric := range metrics {
+		if metric.MetricValue == nil {
+			updateErr = errors.Join(updateErr, fmt.Errorf("nil value in metrics[%s]", metric.MetricName))
+			continue
+		}
+		m.Gauge[metric.MetricName] = *metric.MetricValue
+	}
+	return updateErr
 }
 
 /*
@@ -47,13 +68,36 @@ Returns:
 
 	error: nil or error of adding counter to the MemStorgage
 */
-func (m *MemStorage) AddCounter(metricName string, value int64) error {
+func (m *MemStorage) AddCounter(ctx context.Context, metricName string, delta int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.Counter[metricName] += value
+	m.Counter[metricName] += delta
 
 	return nil
+}
+
+func (m *MemStorage) AddBatchCounter(ctx context.Context, metrics []struct {
+	MetricName  string
+	MetricDelta *int64
+}) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var addError error
+
+	for _, metric := range metrics {
+		if metric.MetricDelta == nil {
+			addError = errors.Join(addError, fmt.Errorf("nil delta in metrics[%s]", metric.MetricName))
+			continue
+		}
+		if currentDelta, ok := m.Counter[metric.MetricName]; ok {
+			m.Counter[metric.MetricName] = currentDelta + *metric.MetricDelta
+		} else {
+			m.Counter[metric.MetricName] = *metric.MetricDelta
+		}
+	}
+	return addError
 }
 
 /*
@@ -69,40 +113,40 @@ Returns:
 	string: value of metrica in the string representation
 	error: nil or error if metrica was not found in the MemStorage
 */
-func (m *MemStorage) GetMetrica(metricaType string, metricaName string) (interface{}, error) {
+func (m *MemStorage) GetMetrica(ctx context.Context, metricaType string, metricaName string) (interface{}, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	switch metricaType {
 	case "gauge":
 		if _, ok := m.Gauge[metricaName]; !ok {
-			return nil, errors.ErrMetricaNotFaund
+			return nil, myErrors.ErrMetricaNotFaund
 		}
 		return m.Gauge[metricaName], nil
 
 	case "counter":
 		if _, ok := m.Counter[metricaName]; !ok {
-			return nil, errors.ErrMetricaNotFaund
+			return nil, myErrors.ErrMetricaNotFaund
 		}
 		return m.Counter[metricaName], nil
 
 	default:
 		// case with uncorrect type of metrica
-		return nil, errors.ErrMetricaNotFaund
+		return nil, myErrors.ErrMetricaNotFaund
 	}
 }
 
 /*
 GetAllMetrica return copy of data in memory storage
 */
-func (m *MemStorage) GetAllMetrics() interface{} {
+func (m *MemStorage) GetAllMetrics(ctx context.Context) (interface{}, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	return struct {
 		Gauges   map[string]float64 `json:"gauges"`
 		Counters map[string]int64   `json:"counters"`
-	}{m.Gauge, m.Counter}
+	}{m.Gauge, m.Counter}, nil
 }
 
 /*
@@ -123,7 +167,7 @@ Output example:
 	Counter1: 1
 	Counter2: 42
 */
-func (m *MemStorage) String() string {
+func (m *MemStorage) String(ctx context.Context) string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -146,7 +190,7 @@ Returns:
 
 	string: html representation of the current state the MemStorage
 */
-func (m *MemStorage) HTML() string {
+func (m *MemStorage) HTML(ctx context.Context) string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -223,4 +267,23 @@ func NewMemStorage() *MemStorage {
 		Gauge:   make(map[string]float64),
 		Counter: make(map[string]int64),
 	}
+}
+
+func (m *MemStorage) PingContext(ctx context.Context) error {
+	if m.Counter == nil || m.Gauge == nil {
+		return myErrors.ErrMemStorageNotInitilized
+	}
+	return nil
+}
+
+func (m *MemStorage) Close() error {
+	return m.Clear(context.TODO())
+}
+
+func (m *MemStorage) Clear(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	clear(m.Gauge)
+	clear(m.Counter)
+	return nil
 }

@@ -18,6 +18,7 @@ type AgentConfig struct {
 	ShowVersion    bool
 	ReportMode     string // json or raw
 	Compress       string // gzip or none
+	Batch          bool
 }
 
 func NewAgentConfig() *AgentConfig {
@@ -28,11 +29,13 @@ func NewAgentConfig() *AgentConfig {
 		LogLevel:       `INFO`,
 		ReportMode:     `json`,
 		Compress:       `gzip`,
+		Batch:          true,
 	}
 }
 
 func (ac *AgentConfig) ParseFlags() error {
 	flag.BoolVar(&ac.ShowVersion, `v`, false, `Show version and exit`)
+	flag.BoolVar(&ac.Batch, `b`, true, `Use batch mode`)
 	flag.StringVar(&ac.AddressServer, `a`, `localhost:8080`, `HTTP-server endpoint address. Environment variable ADDRESS`)
 	flag.StringVar(&ac.LogLevel, `log`, `INFO`, `Set log level: INFO, DEBUG, etc. `)
 	flag.StringVar(&ac.ReportMode, `m`, `json`, `Set method to report metrics: json, raw. Environment variable REPORT_METHOD`)

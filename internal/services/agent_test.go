@@ -12,6 +12,7 @@ import (
 
 func Test_sendMetricsToServerQueryStr(t *testing.T) {
 	type args struct {
+		l         logger
 		ms        MetricsGetter
 		serverURL string
 		client    *http.Client
@@ -25,7 +26,7 @@ func Test_sendMetricsToServerQueryStr(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := sendMetricsToServerQueryStr(tt.args.ms, tt.args.serverURL, tt.args.client); (err != nil) != tt.wantErr {
+			if err := sendMetricsToServerQueryStr(tt.args.l, tt.args.ms, tt.args.serverURL, tt.args.client); (err != nil) != tt.wantErr {
 				t.Errorf("sendMetricsToServerQueryStr() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

@@ -1,31 +1,49 @@
 package services
 
-import "github.com/itaraxa/effectivepancake/internal/models"
+import (
+	"context"
+
+	"github.com/itaraxa/effectivepancake/internal/models"
+)
 
 // Server sides interfaces
 type MetricStorager interface {
 	MetricGetter
 	MetricUpdater
+	MetricBatchUpdater
 	MetricPrinter
+	PingContext(context.Context) error
+	Clear(context.Context) error
+	Close() error
 }
 
 type MetricUpdater interface {
-	UpdateGauge(metricName string, value float64) error
-	AddCounter(metricName string, value int64) error
+	UpdateGauge(context.Context, string, float64) error
+	AddCounter(context.Context, string, int64) error
+}
+
+type MetricBatchUpdater interface {
+	UpdateBatchGauge(context.Context, []struct {
+		MetricName  string
+		MetricValue *float64
+	}) error
+	AddBatchCounter(context.Context, []struct {
+		MetricName  string
+		MetricDelta *int64
+	}) error
 }
 
 type MetricGetter interface {
-	GetMetrica(metricaType string, metricaName string) (interface{}, error)
-	GetAllMetrics() interface{}
+	GetMetrica(context.Context, string, string) (interface{}, error)
+	GetAllMetrics(context.Context) (interface{}, error)
 }
 
 type MetricPrinter interface {
-	String() string
-	HTML() string
+	String(ctx context.Context) string
+	HTML(ctx context.Context) string
 }
 
 // Интерфейс для описания взаимодействия с запросом на обновление метрики
-// TO-DO: move from Qury to Metrica
 type Querier interface {
 	GetMetricaType() string
 	SetMetricaType(string) error

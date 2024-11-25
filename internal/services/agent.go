@@ -3,6 +3,7 @@ package services
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -12,7 +13,7 @@ import (
 	"time"
 
 	"github.com/itaraxa/effectivepancake/internal/config"
-	"github.com/itaraxa/effectivepancake/internal/errors"
+	myErrors "github.com/itaraxa/effectivepancake/internal/errors"
 	"github.com/itaraxa/effectivepancake/internal/models"
 )
 
@@ -29,21 +30,34 @@ Returns:
 
 	error: nil or error, encountered during sending data
 */
-func sendMetricsToServerQueryStr(ms MetricsGetter, serverURL string, client *http.Client) error {
-	for _, m := range ms.GetData() {
+func sendMetricsToServerQueryStr(l logger, ms MetricsGetter, serverURL string, client *http.Client) error {
+	mData := ms.GetData()
+	if len(mData) == 0 {
+		return myErrors.ErrNoMetrics
+	}
+	for _, m := range mData {
 		queryString := ""
 		if m.MType == "gauge" {
-			queryString = fmt.Sprintf("http://%s/update/%s/%s/%f", serverURL, m.MType, m.ID, *m.Value)
+			// queryString = fmt.Sprintf("http://%s/update/%s/%s/%f", serverURL, m.MType, m.ID, *m.Value)
+			queryString = createURL(serverURL, m.MType, m.ID, fmt.Sprint(*m.Value))
 		} else if m.MType == "counter" {
-			queryString = fmt.Sprintf("http://%s/update/%s/%s/%d", serverURL, m.MType, m.ID, *m.Delta)
+			// queryString = fmt.Sprintf("http://%s/update/%s/%s/%d", serverURL, m.MType, m.ID, *m.Delta)
+			queryString = createURL(serverURL, m.MType, m.ID, fmt.Sprint(*m.Delta))
 		}
-		res, err := client.Post(queryString, "text/plain", nil)
+		l.Debug("query string", "string", queryString)
+		req, err := http.NewRequest(`POST`, queryString, nil)
+		req.Header.Set("Content-Type", "text/plain")
 		if err != nil {
-			return errors.ErrSendingMetricsToServer
+			l.Error("cannot create request", "error", err.Error())
+			return err
+		}
+		resp, err := retryRequest(func() (*http.Response, error) { return client.Do(req) })
+		if err != nil {
+			return errors.Join(myErrors.ErrSendingMetricsToServer, err)
 		}
 		// Reading response body to the end to Close body and release the TCP-connection
-		_, err = io.Copy(io.Discard, res.Body)
-		res.Body.Close()
+		_, err = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
 		if err != nil {
 			return err
 		}
@@ -67,17 +81,28 @@ Returns:
 	error: nil or error, encountered during sending data
 */
 func sendMetricaToServerJSON(l logger, ms MetricsGetter, serverURL string, client *http.Client) error {
-	for _, m := range ms.GetData() {
+	mData := ms.GetData()
+	if len(mData) == 0 {
+		return myErrors.ErrNoMetrics
+	}
+	for _, m := range mData {
 		jsonDataReq, err := json.Marshal(m)
 		if err != nil {
 			return err
 		}
 
 		l.Info("json data for send", "string representation", string(jsonDataReq))
-
-		resp, err := client.Post(fmt.Sprintf("http://%s/update/", serverURL), "application/json", bytes.NewBuffer(jsonDataReq))
+		// req, err := http.NewRequest(`POST`, fmt.Sprintf("http://%s/update/", serverURL), bytes.NewBuffer(jsonDataReq))
+		req, err := http.NewRequest(`POST`, createURL(serverURL, `update/`), bytes.NewBuffer(jsonDataReq))
+		l.Debug("query string", "string", createURL(serverURL, `update/`))
+		req.Header.Set("Content-Type", "application/json")
 		if err != nil {
-			return errors.ErrSendingMetricsToServer
+			l.Error("cannot create request", "error", err.Error())
+			return err
+		}
+		resp, err := retryRequest(func() (*http.Response, error) { return client.Do(req) })
+		if err != nil {
+			return errors.Join(myErrors.ErrSendingMetricsToServer, err)
 		}
 		var buf bytes.Buffer
 		_, err = buf.ReadFrom(resp.Body)
@@ -88,6 +113,40 @@ func sendMetricaToServerJSON(l logger, ms MetricsGetter, serverURL string, clien
 		l.Info("json data from responce", "string representation", buf.String())
 		resp.Body.Close()
 	}
+	return nil
+}
+
+func sendMetricaToServerBatch(l logger, ms MetricsGetter, serverURL string, client *http.Client) error {
+	mData := ms.GetData()
+	if len(mData) == 0 {
+		return myErrors.ErrNoMetrics
+	}
+	jsonDataReq, err := json.Marshal(mData)
+	if err != nil {
+		return err
+	}
+	l.Debug("json data for send", "string representation", string(jsonDataReq))
+	// req, err := http.NewRequest(`POST`, fmt.Sprintf("http://%s/updates/", serverURL), bytes.NewBuffer(jsonDataReq))
+	req, err := http.NewRequest(`POST`, createURL(serverURL, `updates/`), bytes.NewBuffer(jsonDataReq))
+	l.Debug("query string", "string", createURL(serverURL, `updates/`))
+	req.Header.Set("Content-Type", "application/json")
+	if err != nil {
+		l.Error("cannot create request", "error", err.Error())
+		return err
+	}
+	resp, err := retryRequest(func() (*http.Response, error) { return client.Do(req) })
+	if err != nil {
+		return errors.Join(myErrors.ErrSendingMetricsToServer, err)
+	}
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(resp.Body)
+	if err != nil {
+		l.Error("cannot read responce body")
+		return err
+	}
+	l.Info("json data from responce", "string representation", buf.String())
+	resp.Body.Close()
+
 	return nil
 }
 
@@ -107,7 +166,11 @@ Returns:
 	error: nil or error, encountered during sending data
 */
 func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, client *http.Client) error {
-	for _, m := range ms.GetData() {
+	mData := ms.GetData()
+	if len(mData) == 0 {
+		return myErrors.ErrNoMetrics
+	}
+	for _, m := range mData {
 		jsonDataReq, err := json.Marshal(m)
 		if err != nil {
 			return err
@@ -118,7 +181,9 @@ func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, c
 			l.Error("cannot compress data", "error", err.Error())
 		}
 		l.Info("json data for send compressd", "string representation", string(jsonDataReq), "compress ratio", float64(len(jsonDataReq))/float64(len(jsonGzipDataReq)))
-		req, err := http.NewRequest(`POST`, fmt.Sprintf("http://%s/update/", serverURL), bytes.NewBuffer(jsonGzipDataReq))
+		// req, err := http.NewRequest(`POST`, fmt.Sprintf("http://%s/update/", serverURL), bytes.NewBuffer(jsonGzipDataReq))
+		req, err := http.NewRequest(`POST`, createURL(serverURL, `update/`), bytes.NewBuffer(jsonGzipDataReq))
+		l.Debug("query string", "string", createURL(serverURL, `update/`))
 		req.Header.Set("Accept-Encoding", "gzip")
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Content-Encoding", "gzip")
@@ -128,9 +193,9 @@ func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, c
 		}
 
 		start := time.Now()
-		resp, err := client.Do(req)
+		resp, err := retryRequest(func() (*http.Response, error) { return client.Do(req) })
 		if err != nil {
-			return errors.ErrSendingMetricsToServer
+			return errors.Join(myErrors.ErrSendingMetricsToServer, err)
 		}
 		defer resp.Body.Close()
 
@@ -141,12 +206,12 @@ func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, c
 			_, err = buf.ReadFrom(resp.Body)
 			if err != nil {
 				l.Error("cannot read responce body")
-				return errors.ErrGettingAnswerFromServer
+				return myErrors.ErrGettingAnswerFromServer
 			}
 			data, err := decompress(buf.Bytes())
 			if err != nil {
 				l.Error("cannot decompress responce body")
-				return errors.ErrGettingAnswerFromServer
+				return myErrors.ErrGettingAnswerFromServer
 			}
 			l.Info("json data from responce", "string representation", string(data), "duration", time.Since(start))
 		// get uncompressed data from server
@@ -155,13 +220,80 @@ func sendMetricaToServerJSONgzip(l logger, ms MetricsGetter, serverURL string, c
 			_, err = buf.ReadFrom(resp.Body)
 			if err != nil {
 				l.Error("cannot read responce body")
-				return errors.ErrGettingAnswerFromServer
+				return myErrors.ErrGettingAnswerFromServer
 			}
 			l.Info("json data from responce", "string representation", buf.String(), "duration", time.Since(start))
 		default:
 			l.Info("received a response with an error code", "status code", resp.StatusCode, "duration", time.Since(start))
 		}
 	}
+	return nil
+}
+
+func sendMetricaToServerBatchgzip(l logger, ms MetricsGetter, serverURL string, client *http.Client) error {
+	mData := ms.GetData()
+	if len(mData) == 0 {
+		l.Error("no metrics for sending")
+		return myErrors.ErrNoMetrics
+	}
+	jsonDataReq, err := json.Marshal(mData)
+	if err != nil {
+		l.Error("marshalling data error", "error", err.Error())
+		return err
+	}
+	jsonGzipDataReq, err := compress(jsonDataReq)
+	if err != nil {
+		l.Error("cannot compress data", "error", err.Error())
+		return err
+	}
+	l.Debug("json data for send compressd", "string representation", string(jsonDataReq), "compress ratio", float64(len(jsonDataReq))/float64(len(jsonGzipDataReq)))
+
+	// req, err := http.NewRequest(`POST`, fmt.Sprintf("http://%s/updates/", serverURL), bytes.NewBuffer(jsonGzipDataReq))
+	req, err := http.NewRequest(`POST`, createURL(serverURL, `updates/`), bytes.NewBuffer(jsonGzipDataReq))
+	l.Debug("query string", "string", createURL(serverURL, `updates/`))
+	req.Header.Set("Accept-Encoding", "gzip")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Encoding", "gzip")
+	if err != nil {
+		l.Error("cannot create request", "error", err.Error())
+		return err
+	}
+
+	start := time.Now()
+	resp, err := retryRequest(func() (*http.Response, error) { return client.Do(req) })
+	if err != nil {
+		return errors.Join(myErrors.ErrSendingMetricsToServer, err)
+	}
+	defer resp.Body.Close()
+
+	switch {
+	// get compressed data from server
+	case resp.StatusCode == http.StatusOK && resp.Header.Get("Content-Encoding") == `gzip`:
+		var buf bytes.Buffer
+		_, err = buf.ReadFrom(resp.Body)
+		if err != nil {
+			l.Error("cannot read responce body")
+			return myErrors.ErrGettingAnswerFromServer
+		}
+		data, err := decompress(buf.Bytes())
+		if err != nil {
+			l.Error("cannot decompress responce body")
+			return myErrors.ErrGettingAnswerFromServer
+		}
+		l.Info("json data from responce", "string representation", string(data), "duration", time.Since(start))
+	// get uncompressed data from server
+	case resp.StatusCode == http.StatusOK && resp.Header.Get("Content-Encoding") == "":
+		var buf bytes.Buffer
+		_, err = buf.ReadFrom(resp.Body)
+		if err != nil {
+			l.Error("cannot read responce body")
+			return myErrors.ErrGettingAnswerFromServer
+		}
+		l.Info("json data from responce", "string representation", buf.String(), "duration", time.Since(start))
+	default:
+		l.Info("received a response with an error code", "status code", resp.StatusCode, "duration", time.Since(start))
+	}
+
 	return nil
 }
 
@@ -182,15 +314,15 @@ func collectMetrics(pollCount int64) (MetricsAddGetter, error) {
 
 	err := jms.AddPollCount(pollCount)
 	if err != nil {
-		return jms, errors.ErrAddPollCount
+		return jms, myErrors.ErrAddPollCount
 	}
 	err = jms.AddData(collectRuntimeMetrics())
 	if err != nil {
-		return jms, errors.ErrAddData
+		return jms, myErrors.ErrAddData
 	}
 	err = jms.AddData(collectOtherMetrics())
 	if err != nil {
-		return jms, errors.ErrAddData
+		return jms, myErrors.ErrAddData
 	}
 
 	return jms, nil
@@ -353,7 +485,7 @@ POLLING:
 			l.Error("Error collect metrics")
 		}
 		if len(dataChan) == cap(dataChan) {
-			l.Error("Error internal commnication", "error", errors.ErrChannelFull.Error())
+			l.Error("Error internal commnication", "error", myErrors.ErrChannelFull.Error())
 		}
 		dataChan <- ms
 		pollCounter += 1
@@ -382,38 +514,54 @@ Returns:
 
 	None
 */
-func ReportMetrics(wg *sync.WaitGroup, controlChan chan bool, dataChan chan MetricsAddGetter, l logger, config *config.AgentConfig, client *http.Client) {
+func ReportMetrics(wg *sync.WaitGroup, controlChan chan bool, dataChan chan MetricsAddGetter, l logger, conf *config.AgentConfig, client *http.Client) {
 	defer wg.Done()
 	var reportCounter uint64 = 0
 REPORTING:
 	for {
 		controlChan <- false
 
-		time.Sleep(config.ReportInterval)
+		time.Sleep(conf.ReportInterval)
 		for len(dataChan) > 0 {
 			l.Info("Report counter", "Value", reportCounter)
 			switch {
-			case config.ReportMode == `json` && config.Compress == `gzip`:
-				err := sendMetricaToServerJSONgzip(l, <-dataChan, config.AddressServer, client)
-				if err != nil {
-					l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
-					// Pause for next sending
-					time.Sleep(1 * time.Second)
-				}
-			case config.ReportMode == `json` && config.Compress == `none`:
-				err := sendMetricaToServerJSON(l, <-dataChan, config.AddressServer, client)
-				if err != nil {
-					l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
-					// Pause for next sending
-					time.Sleep(1 * time.Second)
-				}
-			case config.ReportMode == `raw`:
-				err := sendMetricsToServerQueryStr(<-dataChan, config.AddressServer, client)
-				if err != nil {
-					l.Error("Error sending to server. Waiting 1 second", "server", config.AddressServer, "error", errors.ErrSendingMetricsToServer.Error())
-					// Pause for next sending
-					time.Sleep(1 * time.Second)
-				}
+			case conf.ReportMode == `json` && conf.Compress == `gzip` && !conf.Batch:
+				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
+					err := sendMetricaToServerJSONgzip(l, <-dataChan, config.AddressServer, client)
+					if err != nil {
+						l.Error("sending gzipped json metrica", "error", err.Error())
+					}
+				}(l, dataChan, conf, client)
+			case conf.ReportMode == `json` && conf.Compress == `none` && !conf.Batch:
+				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
+					err := sendMetricaToServerJSON(l, <-dataChan, config.AddressServer, client)
+					if err != nil {
+						l.Error("sending nongzipped json metrica", "error", err.Error())
+					}
+				}(l, dataChan, conf, client)
+			case conf.ReportMode == `raw` && !conf.Batch:
+				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
+					err := sendMetricsToServerQueryStr(l, <-dataChan, config.AddressServer, client)
+					if err != nil {
+						l.Error("sending query string metrica", "error", err.Error())
+					}
+				}(l, dataChan, conf, client)
+
+			case conf.Batch && conf.Compress == `none`:
+				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
+					err := sendMetricaToServerBatch(l, <-dataChan, config.AddressServer, client)
+					if err != nil {
+						l.Error("sending nongzipped batch of metrics", "error", err.Error())
+					}
+				}(l, dataChan, conf, client)
+
+			case conf.Batch && conf.Compress == `gzip`:
+				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
+					err := sendMetricaToServerBatchgzip(l, <-dataChan, config.AddressServer, client)
+					if err != nil {
+						l.Error("sending gzipped batch of metrics", "error", err.Error())
+					}
+				}(l, dataChan, conf, client)
 			}
 		}
 		reportCounter++

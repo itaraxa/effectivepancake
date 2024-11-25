@@ -16,6 +16,7 @@ type ServerConfig struct {
 	StoreInterval   int
 	FileStoragePath string
 	Restore         bool
+	DatabaseDSN     string
 }
 
 /*
@@ -50,11 +51,12 @@ Returns:
 */
 func (sc *ServerConfig) ParseFlags() error {
 	flag.BoolVar(&sc.ShowVersion, `v`, false, `Show version and exit`)
-	flag.StringVar(&sc.Endpoint, `a`, `localhost:8080`, `HTTP-server endpoint address`)
+	flag.StringVar(&sc.Endpoint, `a`, `localhost:8080`, `HTTP-server endpoint address. Environment variable ADDRESS`)
 	flag.StringVar(&sc.LogLevel, `log`, `INFO`, `Set log level: INFO, DEBUG, etc.`)
-	flag.BoolVar(&sc.Restore, `r`, true, `Restore saved data from the file`)
-	flag.StringVar(&sc.FileStoragePath, `f`, `metrics.dat`, `File path for saving metrics`)
-	flag.IntVar(&sc.StoreInterval, `i`, 300, `Time interval after which the current metrics are saved to a file. If set to 0, data is saved synchronously`)
+	flag.BoolVar(&sc.Restore, `r`, true, `Restore saved data from the file. Environment variable RESTORE`)
+	flag.StringVar(&sc.FileStoragePath, `f`, `metrics.dat`, `File path for saving metrics. Environment variable FILE_STORAGE_PATH`)
+	flag.StringVar(&sc.DatabaseDSN, `d`, ``, `database connection string. Environment variable DATABASE_DSN`)
+	flag.IntVar(&sc.StoreInterval, `i`, 300, `Time interval after which the current metrics are saved to a file. If set to 0, data is saved synchronously. Environment variable STORE_INTERVAL`)
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Version: %s\nUsage of %s\n", version.ServerVersion, os.Args[0])
 		flag.PrintDefaults()
@@ -100,6 +102,9 @@ func (sc *ServerConfig) ParseEnv() error {
 			return fmt.Errorf(`uncorrect value in environment variable: %v`, err)
 		}
 		sc.Restore = r
+	}
+	if database, ok := os.LookupEnv(`DATABASE_DSN`); ok {
+		sc.DatabaseDSN = database
 	}
 	return nil
 }

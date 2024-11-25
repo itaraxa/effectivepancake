@@ -16,6 +16,7 @@ var (
 	ErrEmptyMetricaName        = errors.New("empty metric name in query")
 	ErrEmptyMetricaRawValue    = errors.New("empty metrica raw value in query")
 	ErrGettingAnswerFromServer = errors.New("cannot read server answer")
+	ErrMemStorageNotInitilized = errors.New("memstorage not initialized")
 
 	// Agent errors
 	ErrRequestCreating        = errors.New("creating request error")
@@ -25,4 +26,5 @@ var (
 	ErrSendingMetricsToServer = errors.New("error in services.SendMetricsToServer")
 	ErrAddPollCount           = errors.New("error adding pollCount into an instance of the models.Metrics")
 	ErrAddData                = errors.New("error adding data into an instance of the models.Metrics")
+	ErrNoMetrics              = errors.New("GetData() didn't return any metrics")
 )

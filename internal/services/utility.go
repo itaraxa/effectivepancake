@@ -3,15 +3,25 @@ package services
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
+	"errors"
 	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
-func ShowQuery(q Querier) {
-	fmt.Println(q.String())
+func ShowQuery(q Querier) string {
+	return q.String()
 }
 
-func ShowStorage(s MetricPrinter) {
-	fmt.Println(s.String())
+func ShowStorage(s MetricPrinter) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return s.String(ctx)
 }
 
 /*
@@ -71,4 +81,74 @@ func decompress(data []byte) ([]byte, error) {
 	}
 
 	return b.Bytes(), nil
+}
+
+/*
+retryablePgError checks the error type and decides whether to retry the request
+
+Args:
+
+	err error: a checkable error
+
+Returns:
+
+	bool: true - do retry, false - don't retry
+*/
+func retryablePgError(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case pgerrcode.DeadlockDetected, pgerrcode.LockNotAvailable, pgerrcode.ConnectionException, pgerrcode.ConnectionFailure, pgerrcode.SQLClientUnableToEstablishSQLConnection:
+			return true
+		}
+	}
+	return false
+}
+
+/*
+retryQueryToDB a wrapper function for retrying functions of the form `func() error`. Performs 3 retries with delays of 1, 3, and 5 seconds
+
+Args:
+
+	operation func() error: function for retrying
+
+Returns:
+
+	error
+*/
+func retryQueryToDB(operation func() error) error {
+	for i := 0; i < 3; i++ {
+		err := operation()
+		if err == nil {
+			return nil
+		}
+
+		if retryablePgError(err) {
+			time.Sleep(time.Second * time.Duration(2*i+1))
+		} else {
+			return err
+		}
+	}
+	return fmt.Errorf("operation failed after 3 attempts")
+}
+
+func retryRequest(operation func() (*http.Response, error)) (*http.Response, error) {
+	for i := 0; i < 3; i++ {
+		resp, err := operation()
+		if err == nil {
+			return resp, nil
+		}
+
+		time.Sleep(time.Second * time.Duration(2*i+1))
+	}
+	return nil, fmt.Errorf("operation failed after 3 attempts")
+}
+
+func createURL(serverURL string, p ...string) string {
+
+	if strings.Contains(serverURL, `http://`) {
+		return serverURL + `/` + strings.Join(p, `/`)
+	} else {
+		return `http://` + serverURL + `/` + strings.Join(p, `/`)
+	}
 }
