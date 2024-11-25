@@ -200,7 +200,7 @@ func SignSHA256(l logger, body io.Reader, key string) (string, error) {
 
 	h := hmac.New(sha256.New, []byte(key))
 	var data []byte
-	var d int = 0
+	d := 0
 	buffer := make([]byte, 1024)
 	for {
 		n, err := body.Read(buffer)
