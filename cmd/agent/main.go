@@ -63,15 +63,27 @@ func (aa *AgentApp) Run() {
 		pollingStopChan <- true
 		<-reportStopChan
 		reportStopChan <- true
+		close(msCh)
 	}()
 
 	// goroutine для сбора метрик
 	wg.Add(1)
 	go services.PollMetrics(&wg, pollingStopChan, msCh, aa.logger, aa.config)
 
-	// goroutine для отправки метрик
+	// worker pool для отправки метрик
 	wg.Add(1)
-	go services.ReportMetrics(&wg, reportStopChan, msCh, aa.logger, aa.config, aa.httpClient)
+	if aa.config.RateLimit != 0 {
+		// if RateLimit > 0 -> start worker pool
+		for i := 1; i <= aa.config.RateLimit; i++ {
+			wg.Add(1)
+			aa.logger.Info(fmt.Sprintf("reporting worker %d started", i))
+			go services.ReportMetrics(&wg, reportStopChan, msCh, aa.logger, aa.config, aa.httpClient)
+		}
+	} else {
+		// if RateLimit == 0 -> start single goroutine
+		aa.logger.Info("start single reporting goroutine")
+		go services.ReportMetrics(&wg, reportStopChan, msCh, aa.logger, aa.config, aa.httpClient)
+	}
 
 	wg.Wait()
 }
