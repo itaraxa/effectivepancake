@@ -12,6 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
+
 	"github.com/itaraxa/effectivepancake/internal/config"
 	myErrors "github.com/itaraxa/effectivepancake/internal/errors"
 	"github.com/itaraxa/effectivepancake/internal/models"
@@ -37,7 +40,7 @@ func sendMetricsToServerQueryStr(l logger, ms MetricsGetter, serverURL string, c
 	}
 	for _, m := range mData {
 		queryString := ""
-		if m.MType == "gauge" {
+		if m.MType == gauge {
 			// queryString = fmt.Sprintf("http://%s/update/%s/%s/%f", serverURL, m.MType, m.ID, *m.Value)
 			queryString = createURL(serverURL, m.MType, m.ID, fmt.Sprint(*m.Value))
 		} else if m.MType == "counter" {
@@ -352,6 +355,10 @@ func collectMetrics(pollCount int64) (MetricsAddGetter, error) {
 	if err != nil {
 		return jms, myErrors.ErrAddData
 	}
+	err = jms.AddData(collectGoPsUtilMetrics())
+	if err != nil {
+		return jms, myErrors.ErrAddData
+	}
 
 	return jms, nil
 }
@@ -428,33 +435,74 @@ func collectRuntimeMetrics() []models.JSONMetric {
 	TotalAlloc := float64(memStats.TotalAlloc)
 
 	out := []models.JSONMetric{}
-	out = append(out, models.JSONMetric{ID: "Alloc", MType: "gauge", Value: &Alloc})
-	out = append(out, models.JSONMetric{ID: "BuckHashSys", MType: "gauge", Value: &BuckHashSys})
-	out = append(out, models.JSONMetric{ID: "Frees", MType: "gauge", Value: &Frees})
-	out = append(out, models.JSONMetric{ID: "GCCPUFraction", MType: "gauge", Value: &GCCPUFraction})
-	out = append(out, models.JSONMetric{ID: "GCSys", MType: "gauge", Value: &GCSys})
-	out = append(out, models.JSONMetric{ID: "HeapAlloc", MType: "gauge", Value: &HeapAlloc})
-	out = append(out, models.JSONMetric{ID: "HeapIdle", MType: "gauge", Value: &HeapIdle})
-	out = append(out, models.JSONMetric{ID: "HeapInuse", MType: "gauge", Value: &HeapInuse})
-	out = append(out, models.JSONMetric{ID: "HeapObjects", MType: "gauge", Value: &HeapObjects})
-	out = append(out, models.JSONMetric{ID: "HeapReleased", MType: "gauge", Value: &HeapReleased})
-	out = append(out, models.JSONMetric{ID: "HeapSys", MType: "gauge", Value: &HeapSys})
-	out = append(out, models.JSONMetric{ID: "LastGC", MType: "gauge", Value: &LastGC})
-	out = append(out, models.JSONMetric{ID: "Lookups", MType: "gauge", Value: &Lookups})
-	out = append(out, models.JSONMetric{ID: "MCacheInuse", MType: "gauge", Value: &MCacheInuse})
-	out = append(out, models.JSONMetric{ID: "MCacheSys", MType: "gauge", Value: &MCacheSys})
-	out = append(out, models.JSONMetric{ID: "MSpanInuse", MType: "gauge", Value: &MSpanInuse})
-	out = append(out, models.JSONMetric{ID: "MSpanSys", MType: "gauge", Value: &MSpanSys})
-	out = append(out, models.JSONMetric{ID: "Mallocs", MType: "gauge", Value: &Mallocs})
-	out = append(out, models.JSONMetric{ID: "NextGC", MType: "gauge", Value: &NextGC})
-	out = append(out, models.JSONMetric{ID: "NumForcedGC", MType: "gauge", Value: &NumForcedGC})
-	out = append(out, models.JSONMetric{ID: "NumGC", MType: "gauge", Value: &NumGC})
-	out = append(out, models.JSONMetric{ID: "OtherSys", MType: "gauge", Value: &OtherSys})
-	out = append(out, models.JSONMetric{ID: "PauseTotalNs", MType: "gauge", Value: &PauseTotalNs})
-	out = append(out, models.JSONMetric{ID: "StackInuse", MType: "gauge", Value: &StackInuse})
-	out = append(out, models.JSONMetric{ID: "StackSys", MType: "gauge", Value: &StackSys})
-	out = append(out, models.JSONMetric{ID: "Sys", MType: "gauge", Value: &Sys})
-	out = append(out, models.JSONMetric{ID: "TotalAlloc", MType: "gauge", Value: &TotalAlloc})
+	out = append(out, models.JSONMetric{ID: "Alloc", MType: gauge, Value: &Alloc})
+	out = append(out, models.JSONMetric{ID: "BuckHashSys", MType: gauge, Value: &BuckHashSys})
+	out = append(out, models.JSONMetric{ID: "Frees", MType: gauge, Value: &Frees})
+	out = append(out, models.JSONMetric{ID: "GCCPUFraction", MType: gauge, Value: &GCCPUFraction})
+	out = append(out, models.JSONMetric{ID: "GCSys", MType: gauge, Value: &GCSys})
+	out = append(out, models.JSONMetric{ID: "HeapAlloc", MType: gauge, Value: &HeapAlloc})
+	out = append(out, models.JSONMetric{ID: "HeapIdle", MType: gauge, Value: &HeapIdle})
+	out = append(out, models.JSONMetric{ID: "HeapInuse", MType: gauge, Value: &HeapInuse})
+	out = append(out, models.JSONMetric{ID: "HeapObjects", MType: gauge, Value: &HeapObjects})
+	out = append(out, models.JSONMetric{ID: "HeapReleased", MType: gauge, Value: &HeapReleased})
+	out = append(out, models.JSONMetric{ID: "HeapSys", MType: gauge, Value: &HeapSys})
+	out = append(out, models.JSONMetric{ID: "LastGC", MType: gauge, Value: &LastGC})
+	out = append(out, models.JSONMetric{ID: "Lookups", MType: gauge, Value: &Lookups})
+	out = append(out, models.JSONMetric{ID: "MCacheInuse", MType: gauge, Value: &MCacheInuse})
+	out = append(out, models.JSONMetric{ID: "MCacheSys", MType: gauge, Value: &MCacheSys})
+	out = append(out, models.JSONMetric{ID: "MSpanInuse", MType: gauge, Value: &MSpanInuse})
+	out = append(out, models.JSONMetric{ID: "MSpanSys", MType: gauge, Value: &MSpanSys})
+	out = append(out, models.JSONMetric{ID: "Mallocs", MType: gauge, Value: &Mallocs})
+	out = append(out, models.JSONMetric{ID: "NextGC", MType: gauge, Value: &NextGC})
+	out = append(out, models.JSONMetric{ID: "NumForcedGC", MType: gauge, Value: &NumForcedGC})
+	out = append(out, models.JSONMetric{ID: "NumGC", MType: gauge, Value: &NumGC})
+	out = append(out, models.JSONMetric{ID: "OtherSys", MType: gauge, Value: &OtherSys})
+	out = append(out, models.JSONMetric{ID: "PauseTotalNs", MType: gauge, Value: &PauseTotalNs})
+	out = append(out, models.JSONMetric{ID: "StackInuse", MType: gauge, Value: &StackInuse})
+	out = append(out, models.JSONMetric{ID: "StackSys", MType: gauge, Value: &StackSys})
+	out = append(out, models.JSONMetric{ID: "Sys", MType: gauge, Value: &Sys})
+	out = append(out, models.JSONMetric{ID: "TotalAlloc", MType: gauge, Value: &TotalAlloc})
+
+	return out
+}
+
+/*
+collectGoPsUtilMetrics collects metrics from github.com/shirou/gopsutil/v4 package.
+Collected metrics:
+- TotalMemory
+- FreeMemory
+- CPUutilization#
+
+Args:
+
+	None
+
+Returns:
+
+	[]models.Metrica: slice of models.Metrica objects
+*/
+func collectGoPsUtilMetrics() []models.JSONMetric {
+	out := []models.JSONMetric{}
+
+	vMemory, err := mem.VirtualMemory()
+	if err != nil {
+		return nil
+	}
+
+	totalMemory := float64(vMemory.Total)
+	freeMemory := float64(vMemory.Free)
+	out = append(out, models.JSONMetric{ID: "TotalMemory", MType: gauge, Value: &totalMemory})
+	out = append(out, models.JSONMetric{ID: "FreeMemory", MType: gauge, Value: &freeMemory})
+
+	utils, err := cpu.Percent(0, true)
+	if err != nil {
+		return nil
+	}
+	for i, util := range utils {
+		metricName := fmt.Sprintf("CPUutilization%d", i)
+		u := util
+		out = append(out, models.JSONMetric{ID: metricName, MType: gauge, Value: &u})
+	}
 
 	return out
 }
@@ -478,7 +526,7 @@ func collectOtherMetrics() []models.JSONMetric {
 	rv := rand.Float64()
 	out = append(out, models.JSONMetric{
 		ID:    "RandomValue",
-		MType: "gauge",
+		MType: gauge,
 		Value: &rv,
 	})
 
