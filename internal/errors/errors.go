@@ -17,6 +17,8 @@ var (
 	ErrEmptyMetricaRawValue    = errors.New("empty metrica raw value in query")
 	ErrGettingAnswerFromServer = errors.New("cannot read server answer")
 	ErrMemStorageNotInitilized = errors.New("memstorage not initialized")
+	ErrGetVirtualMemory        = errors.New("cannot get virtual memory")
+	ErrGetCPUutilization       = errors.New("cannot get CPU utilization")
 
 	// Agent errors
 	ErrRequestCreating        = errors.New("creating request error")

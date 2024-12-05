@@ -46,7 +46,8 @@ func (aa *AgentApp) Run() {
 	defer aa.logger.Info("Agent stopped")
 
 	var wg sync.WaitGroup
-	msCh := make(chan services.MetricsAddGetter, aa.config.ReportInterval/aa.config.PollInterval+1) // создаем канал для обмена данными между сборщиком и отправщиком
+	msCh := make(chan services.MetricsAddGetter, 128) // создаем канал для обмена данными между сборщиком и отправщиком
+
 	defer close(msCh)
 
 	// Ctrl+C handling
@@ -74,17 +75,13 @@ func (aa *AgentApp) Run() {
 	wg.Add(1)
 	if aa.config.RateLimit != 0 {
 		// if RateLimit > 0 -> start worker pool
-		for i := 1; i <= aa.config.RateLimit; i++ {
-			wg.Add(1)
-			aa.logger.Info(fmt.Sprintf("reporting worker %d started", i))
-			go services.ReportMetrics(&wg, reportStopChan, msCh, aa.logger, aa.config, aa.httpClient)
-		}
+		aa.logger.Info("start worker pool for metrics reporting")
+		go services.ReportMetricsDispatcher(&wg, cap(msCh), aa.config.RateLimit, aa.logger, aa.config, aa.httpClient, msCh)
 	} else {
 		// if RateLimit == 0 -> start single goroutine
 		aa.logger.Info("start single reporting goroutine")
 		go services.ReportMetrics(&wg, reportStopChan, msCh, aa.logger, aa.config, aa.httpClient)
 	}
-
 	wg.Wait()
 }
 
