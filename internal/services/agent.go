@@ -502,19 +502,14 @@ Returns:
 	error
 */
 func collectGoPsUtilMetrics(l logger) (out []models.JSONMetric, errs error) {
-	// out := []models.JSONMetric{}
-	// var errs error
-
 	l.Info("getting virtual memory info")
 	vMemory, err := mem.VirtualMemory()
-	// err = errors.Join(err, errors.New("505:test error"))
 	if err != nil {
 		l.Error("getting virtual memory info", "error", err.Error())
 		errs = errors.Join(errs, myErrors.ErrGetVirtualMemory, err)
 	} else {
 		totalMemory := float64(vMemory.Total)
 		freeMemory := float64(vMemory.Free)
-		// l.Debug("getted virtual memory info", "total memory", totalMemory, "free memory", freeMemory)
 		out = append(out,
 			models.JSONMetric{ID: "TotalMemory", MType: gauge, Value: &totalMemory},
 			models.JSONMetric{ID: "FreeMemory", MType: gauge, Value: &freeMemory},
@@ -530,7 +525,6 @@ func collectGoPsUtilMetrics(l logger) (out []models.JSONMetric, errs error) {
 		for i, util := range utils {
 			metricName := fmt.Sprintf("CPUutilization%d", i)
 			u := util
-			// l.Debug("getted CPU utilization", metricName, u)
 			out = append(out, models.JSONMetric{ID: metricName, MType: gauge, Value: &u})
 		}
 	}
