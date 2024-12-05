@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"sync"
 	"time"
 
@@ -41,36 +42,54 @@ func (aa *AgentApp) Run() {
 		"compress methode", aa.config.Compress,
 		"batch mode", aa.config.Batch,
 		"key", aa.config.Key,
+		"report rate limit", aa.config.RateLimit,
 	)
 	defer aa.logger.Info("Agent stopped")
 
 	var wg sync.WaitGroup
-	msCh := make(chan services.MetricsAddGetter, aa.config.ReportInterval/aa.config.PollInterval+1) // создаем канал для обмена данными между сборщиком и отправщиком
-	defer close(msCh)
+	msCh := make(chan services.MetricsAddGetter, 128) // создаем канал для обмена данными между сборщиком и отправщиком
 
 	// Ctrl+C handling
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt)
-	pollingStopChan := make(chan bool, 1)
-	reportStopChan := make(chan bool, 1)
+	stopChan := make(chan struct{})
 	go func() {
 		<-signalChan
 		aa.logger.Info("Agent stopping", "reason", "Ctrl+C press")
-		// sending true to the control channel if polling/reporting should stop
-		// reading from channel for unblocking
-		<-pollingStopChan
-		pollingStopChan <- true
-		<-reportStopChan
-		reportStopChan <- true
+		close(stopChan)
+		close(msCh)
 	}()
 
 	// goroutine для сбора метрик
 	wg.Add(1)
-	go services.PollMetrics(&wg, pollingStopChan, msCh, aa.logger, aa.config)
+	go services.PollMetrics(&wg, stopChan, msCh, aa.logger, aa.config)
 
-	// goroutine для отправки метрик
+	// worker pool для отправки метрик
 	wg.Add(1)
-	go services.ReportMetrics(&wg, reportStopChan, msCh, aa.logger, aa.config, aa.httpClient)
+	if aa.config.RateLimit != 0 {
+		// if RateLimit > 0 -> start worker pool
+		aa.logger.Info("start worker pool for metrics reporting")
+		go services.ReportMetricsDispatcher(&wg, cap(msCh), aa.config.RateLimit, aa.logger, aa.config, aa.httpClient, msCh)
+	} else {
+		// if RateLimit == 0 -> start single goroutine
+		aa.logger.Info("start single reporting goroutine")
+		go services.ReportMetrics(&wg, stopChan, msCh, aa.logger, aa.config, aa.httpClient)
+	}
+
+	wg.Add(1)
+	go func(wg *sync.WaitGroup, stopCh chan struct{}) {
+		defer wg.Done()
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				aa.logger.Debug("goroutines", "count", runtime.NumGoroutine())
+			case <-stopCh:
+				return
+			}
+		}
+	}(&wg, stopChan)
 
 	wg.Wait()
 }

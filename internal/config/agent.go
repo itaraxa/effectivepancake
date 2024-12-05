@@ -20,6 +20,7 @@ type AgentConfig struct {
 	Compress       string // gzip or none
 	Batch          bool
 	Key            string
+	RateLimit      int // limit report per second
 }
 
 func NewAgentConfig() *AgentConfig {
@@ -32,6 +33,7 @@ func NewAgentConfig() *AgentConfig {
 		Compress:       `gzip`,
 		Batch:          true,
 		Key:            ``,
+		RateLimit:      0,
 	}
 }
 
@@ -46,6 +48,7 @@ func (ac *AgentConfig) ParseFlags() error {
 	flag.StringVar(&ac.Key, `k`, ``, `Set a key-string for signing transmitted data. Environment variable KEY`)
 	flag.Int64Var(&p, `p`, 2, `metrics poll interval, seconds. Environment variable POLL_INTERVAL`)
 	flag.Int64Var(&r, `r`, 10, `metrics report interval, seconds. Environment variable REPORT_INTERVAL`)
+	flag.IntVar(&ac.RateLimit, `l`, 0, `upper limit for sending metrics, reports per second. Envirinment variable RATE_LIMIT`)
 
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Version: %s\nUsage of %s\n", version.AgentVersion, os.Args[0])
@@ -73,6 +76,17 @@ func (ac *AgentConfig) ParseEnv() error {
 		}
 		ac.PollInterval = time.Duration(pi) * time.Second
 	}
+	l, ok := os.LookupEnv(`RATE_LIMIT`)
+	if ok {
+		rl, err := strconv.Atoi(l)
+		if err != nil {
+			return err
+		}
+		if rl < 0 {
+			return fmt.Errorf("RATE_LIMIT value < 0")
+		}
+		ac.RateLimit = rl
+	}
 
 	r, ok := os.LookupEnv(`REPORT_INTERVAL`)
 	if ok {
@@ -88,7 +102,7 @@ func (ac *AgentConfig) ParseEnv() error {
 		ac.AddressServer = addressServer
 	}
 
-	l, ok := os.LookupEnv(`LOG_LEVEL`)
+	l, ok = os.LookupEnv(`LOG_LEVEL`)
 	if ok {
 		switch l {
 		case `INFO`:

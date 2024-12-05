@@ -12,6 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
+
 	"github.com/itaraxa/effectivepancake/internal/config"
 	myErrors "github.com/itaraxa/effectivepancake/internal/errors"
 	"github.com/itaraxa/effectivepancake/internal/models"
@@ -37,12 +40,10 @@ func sendMetricsToServerQueryStr(l logger, ms MetricsGetter, serverURL string, c
 	}
 	for _, m := range mData {
 		queryString := ""
-		if m.MType == "gauge" {
-			// queryString = fmt.Sprintf("http://%s/update/%s/%s/%f", serverURL, m.MType, m.ID, *m.Value)
-			queryString = createURL(serverURL, m.MType, m.ID, fmt.Sprint(*m.Value))
-		} else if m.MType == "counter" {
-			// queryString = fmt.Sprintf("http://%s/update/%s/%s/%d", serverURL, m.MType, m.ID, *m.Delta)
-			queryString = createURL(serverURL, m.MType, m.ID, fmt.Sprint(*m.Delta))
+		if m.MType == gauge {
+			queryString = createURL(serverURL, "update", m.MType, m.ID, fmt.Sprint(*m.Value))
+		} else if m.MType == counter {
+			queryString = createURL(serverURL, "update", m.MType, m.ID, fmt.Sprint(*m.Delta))
 		}
 		l.Debug("query string", "string", queryString)
 		req, err := http.NewRequest(`POST`, queryString, nil)
@@ -268,7 +269,6 @@ func sendMetricaToServerBatchgzip(l logger, ms MetricsGetter, serverURL string, 
 	}
 	l.Debug("json data for send compressd", "string representation", string(jsonDataReq), "compress ratio", float64(len(jsonDataReq))/float64(len(jsonGzipDataReq)))
 
-	// req, err := http.NewRequest(`POST`, fmt.Sprintf("http://%s/updates/", serverURL), bytes.NewBuffer(jsonGzipDataReq))
 	req, err := http.NewRequest(`POST`, createURL(serverURL, `updates/`), bytes.NewBuffer(jsonGzipDataReq))
 	l.Debug("query string", "string", createURL(serverURL, `updates/`))
 	req.Header.Set("Accept-Encoding", "gzip")
@@ -334,24 +334,37 @@ Args:
 
 Returns:
 
-	*models.Metrica: pointer to models.Metrics structure, which store metrica data on Agent
+	MetricsAddGetter: pobject, which can store metrica data on Agent
 	error: nil
 */
-func collectMetrics(pollCount int64) (MetricsAddGetter, error) {
+func collectMetrics(l logger, pollCount int64) (MetricsAddGetter, error) {
 	jms := &models.JSONMetrics{}
 
+	l.Debug("adding poll count")
 	err := jms.AddPollCount(pollCount)
 	if err != nil {
 		return jms, myErrors.ErrAddPollCount
 	}
+	l.Debug("collecting runtime metrics")
 	err = jms.AddData(collectRuntimeMetrics())
 	if err != nil {
 		return jms, myErrors.ErrAddData
 	}
+	l.Debug("colecting other metrics")
 	err = jms.AddData(collectOtherMetrics())
 	if err != nil {
 		return jms, myErrors.ErrAddData
 	}
+	l.Debug("collecting GoPsUtils metrics")
+	t, err := collectGoPsUtilMetrics(l)
+	if err != nil {
+		return jms, errors.Join(myErrors.ErrAddData, err)
+	}
+	err = jms.AddData(t)
+	if err != nil {
+		return jms, myErrors.ErrAddData
+	}
+	l.Debug("metrics collected")
 
 	return jms, nil
 }
@@ -362,7 +375,7 @@ Collected metrics:
   - Alloc
   - BuckHashSys
   - Frees
-  - GCCPUFraction -
+  - GCCPUFraction
   - GCSys
   - HeapAlloc
   - HeapIdle
@@ -370,18 +383,18 @@ Collected metrics:
   - HeapObjects
   - HeapReleased
   - HeapSys
-  - LastGC -
-  - Lookups -
+  - LastGC
+  - Lookups
   - MCacheInuse
   - MCacheSys
   - MSpanInuse
   - MSpanSys
   - Mallocs
   - NextGC
-  - NumForcedGC -
-  - NumGC -
+  - NumForcedGC
+  - NumGC
   - OtherSys
-  - PauseTotalNs -
+  - PauseTotalNs
   - StackInuse
   - StackSys
   - Sys
@@ -393,7 +406,7 @@ Args:
 
 Returns:
 
-	[]models.Metrica: slice of models.Metrica objects
+	[]models.JSONMetric: slice of models.JSONMetric objects
 */
 func collectRuntimeMetrics() []models.JSONMetric {
 	var memStats runtime.MemStats
@@ -427,36 +440,96 @@ func collectRuntimeMetrics() []models.JSONMetric {
 	Sys := float64(memStats.Sys)
 	TotalAlloc := float64(memStats.TotalAlloc)
 
+	metrics := []struct {
+		ID    string
+		Value *float64
+	}{
+		{"Alloc", &Alloc},
+		{"BuckHashSys", &BuckHashSys},
+		{"Frees", &Frees},
+		{"GCCPUFraction", &GCCPUFraction},
+		{"GCSys", &GCSys},
+		{"HeapAlloc", &HeapAlloc},
+		{"HeapIdle", &HeapIdle},
+		{"HeapInuse", &HeapInuse},
+		{"HeapObjects", &HeapObjects},
+		{"HeapReleased", &HeapReleased},
+		{"HeapSys", &HeapSys},
+		{"LastGC", &LastGC},
+		{"Lookups", &Lookups},
+		{"MCacheInuse", &MCacheInuse},
+		{"MCacheSys", &MCacheSys},
+		{"MSpanInuse", &MSpanInuse},
+		{"MSpanSys", &MSpanSys},
+		{"Mallocs", &Mallocs},
+		{"NextGC", &NextGC},
+		{"NumForcedGC", &NumForcedGC},
+		{"NumGC", &NumGC},
+		{"OtherSys", &OtherSys},
+		{"PauseTotalNs", &PauseTotalNs},
+		{"StackInuse", &StackInuse},
+		{"StackSys", &StackSys},
+		{"Sys", &Sys},
+		{"TotalAlloc", &TotalAlloc},
+	}
+
 	out := []models.JSONMetric{}
-	out = append(out, models.JSONMetric{ID: "Alloc", MType: "gauge", Value: &Alloc})
-	out = append(out, models.JSONMetric{ID: "BuckHashSys", MType: "gauge", Value: &BuckHashSys})
-	out = append(out, models.JSONMetric{ID: "Frees", MType: "gauge", Value: &Frees})
-	out = append(out, models.JSONMetric{ID: "GCCPUFraction", MType: "gauge", Value: &GCCPUFraction})
-	out = append(out, models.JSONMetric{ID: "GCSys", MType: "gauge", Value: &GCSys})
-	out = append(out, models.JSONMetric{ID: "HeapAlloc", MType: "gauge", Value: &HeapAlloc})
-	out = append(out, models.JSONMetric{ID: "HeapIdle", MType: "gauge", Value: &HeapIdle})
-	out = append(out, models.JSONMetric{ID: "HeapInuse", MType: "gauge", Value: &HeapInuse})
-	out = append(out, models.JSONMetric{ID: "HeapObjects", MType: "gauge", Value: &HeapObjects})
-	out = append(out, models.JSONMetric{ID: "HeapReleased", MType: "gauge", Value: &HeapReleased})
-	out = append(out, models.JSONMetric{ID: "HeapSys", MType: "gauge", Value: &HeapSys})
-	out = append(out, models.JSONMetric{ID: "LastGC", MType: "gauge", Value: &LastGC})
-	out = append(out, models.JSONMetric{ID: "Lookups", MType: "gauge", Value: &Lookups})
-	out = append(out, models.JSONMetric{ID: "MCacheInuse", MType: "gauge", Value: &MCacheInuse})
-	out = append(out, models.JSONMetric{ID: "MCacheSys", MType: "gauge", Value: &MCacheSys})
-	out = append(out, models.JSONMetric{ID: "MSpanInuse", MType: "gauge", Value: &MSpanInuse})
-	out = append(out, models.JSONMetric{ID: "MSpanSys", MType: "gauge", Value: &MSpanSys})
-	out = append(out, models.JSONMetric{ID: "Mallocs", MType: "gauge", Value: &Mallocs})
-	out = append(out, models.JSONMetric{ID: "NextGC", MType: "gauge", Value: &NextGC})
-	out = append(out, models.JSONMetric{ID: "NumForcedGC", MType: "gauge", Value: &NumForcedGC})
-	out = append(out, models.JSONMetric{ID: "NumGC", MType: "gauge", Value: &NumGC})
-	out = append(out, models.JSONMetric{ID: "OtherSys", MType: "gauge", Value: &OtherSys})
-	out = append(out, models.JSONMetric{ID: "PauseTotalNs", MType: "gauge", Value: &PauseTotalNs})
-	out = append(out, models.JSONMetric{ID: "StackInuse", MType: "gauge", Value: &StackInuse})
-	out = append(out, models.JSONMetric{ID: "StackSys", MType: "gauge", Value: &StackSys})
-	out = append(out, models.JSONMetric{ID: "Sys", MType: "gauge", Value: &Sys})
-	out = append(out, models.JSONMetric{ID: "TotalAlloc", MType: "gauge", Value: &TotalAlloc})
+	for _, metric := range metrics {
+		out = append(out, models.JSONMetric{
+			ID:    metric.ID,
+			MType: gauge,
+			Value: metric.Value,
+		})
+	}
 
 	return out
+}
+
+/*
+collectGoPsUtilMetrics collects metrics from github.com/shirou/gopsutil/v4 package.
+Collected metrics:
+- TotalMemory
+- FreeMemory
+- CPUutilization#
+
+Args:
+
+	None
+
+Returns:
+
+	[]models.JSONMetric: slice of models.JSONMetric objects
+	error
+*/
+func collectGoPsUtilMetrics(l logger) (out []models.JSONMetric, errs error) {
+	l.Info("getting virtual memory info")
+	vMemory, err := mem.VirtualMemory()
+	if err != nil {
+		l.Error("getting virtual memory info", "error", err.Error())
+		errs = errors.Join(errs, myErrors.ErrGetVirtualMemory, err)
+	} else {
+		totalMemory := float64(vMemory.Total)
+		freeMemory := float64(vMemory.Free)
+		out = append(out,
+			models.JSONMetric{ID: "TotalMemory", MType: gauge, Value: &totalMemory},
+			models.JSONMetric{ID: "FreeMemory", MType: gauge, Value: &freeMemory},
+		)
+	}
+
+	l.Info("geting CPU utilization info")
+	utils, err := cpu.Percent(0, true)
+	if err != nil {
+		l.Error("getting CPU utilization", "error", err.Error())
+		errs = errors.Join(errs, myErrors.ErrGetCPUutilization, err)
+	} else {
+		for i, util := range utils {
+			metricName := fmt.Sprintf("CPUutilization%d", i)
+			u := util
+			out = append(out, models.JSONMetric{ID: metricName, MType: gauge, Value: &u})
+		}
+	}
+
+	return out, errs
 }
 
 /*
@@ -470,7 +543,7 @@ Args:
 
 Returns:
 
-	[]models.Metrica: slice of models.Metrica objects
+	[]models.JSONMetric: slice of models.Metrica objects
 */
 func collectOtherMetrics() []models.JSONMetric {
 	out := []models.JSONMetric{}
@@ -478,7 +551,7 @@ func collectOtherMetrics() []models.JSONMetric {
 	rv := rand.Float64()
 	out = append(out, models.JSONMetric{
 		ID:    "RandomValue",
-		MType: "gauge",
+		MType: gauge,
 		Value: &rv,
 	})
 
@@ -491,7 +564,7 @@ Function for periodically collecting all metrics
 Args:
 
 	wg *sync.WaitGroup: pointer to sync.WaitGroup for for controlling the completion of a function in a goroutine
-	controlChan chan bool: channel for receiving a stop signal
+	stopChan chan struct{}: channel for receiving a stop signal. When channel closed - reporting will be stopped
 	dataChan chan Metricer: channel for exchanging metric data
 	l logger.Logger: pointer to logger instance
 	pollInterval time.Duration
@@ -500,28 +573,29 @@ Returns:
 
 	None
 */
-func PollMetrics(wg *sync.WaitGroup, controlChan chan bool, dataChan chan MetricsAddGetter, l logger, config *config.AgentConfig) {
+func PollMetrics(wg *sync.WaitGroup, stopChan chan struct{}, dataChan chan MetricsAddGetter, l logger, conf *config.AgentConfig) {
 	defer wg.Done()
 	var pollCounter int64 = 0
-POLLING:
+	ticker := time.NewTicker(conf.PollInterval)
+	defer ticker.Stop()
+
 	for {
-		controlChan <- false
-
-		l.Info("Poll counter", "Value", pollCounter)
-		ms, err := collectMetrics(pollCounter)
-		if err != nil {
-			l.Error("Error collect metrics")
-		}
-		if len(dataChan) == cap(dataChan) {
-			l.Error("Error internal commnication", "error", myErrors.ErrChannelFull.Error())
-		}
-		dataChan <- ms
-		pollCounter += 1
-		time.Sleep(config.PollInterval)
-
-		if <-controlChan {
-			l.Info("Polling metrica stopped")
-			break POLLING
+		select {
+		case <-ticker.C:
+			l.Info("poll counter", "Value", pollCounter)
+			ms, err := collectMetrics(l, pollCounter)
+			if err != nil {
+				l.Error("collecting metrics", "error", err.Error())
+			}
+			if len(dataChan) == cap(dataChan) {
+				l.Error("error internal communication", "error", myErrors.ErrChannelFull.Error())
+			}
+			dataChan <- ms
+			pollCounter += 1
+		case <-stopChan:
+			l.Info("get signal to stop metrica polling")
+			l.Info("metrica polling stopped")
+			return
 		}
 	}
 }
@@ -532,9 +606,9 @@ Function for periodically sending metrics
 Args:
 
 	wg *sync.WaitGroup: pointer to sync.WaitGroup for for controlling the completion of a function in a goroutine
-	controlChan chan bool: channel for receiving a stop signal
-	dataChan chan Metricer: channel for exchanging metric data
-	l logger.Logger: pointer to logger instance
+	controlChan chan struct{}: channel for receiving a stop signal. When channel closed - reporting will be stopped
+	dataChan chan MetricsAddGetter: channel for exchanging metric data
+	l logger: pointer to logger instance
 	config *config.AgentConfig: pointer to config instance
 	client *http.Client: pointer to http client instance
 
@@ -542,61 +616,99 @@ Returns:
 
 	None
 */
-func ReportMetrics(wg *sync.WaitGroup, controlChan chan bool, dataChan chan MetricsAddGetter, l logger, conf *config.AgentConfig, client *http.Client) {
+func ReportMetrics(wg *sync.WaitGroup, stopChan chan struct{}, dataChan chan MetricsAddGetter, l logger, conf *config.AgentConfig, client *http.Client) {
 	defer wg.Done()
 	var reportCounter uint64 = 0
-REPORTING:
+
+	ticker := time.NewTicker(conf.ReportInterval)
+	defer ticker.Stop()
+
 	for {
-		controlChan <- false
+		select {
+		case <-ticker.C:
+			for len(dataChan) > 0 {
+				l.Info("Report counter", "Value", reportCounter)
+				switch {
+				case conf.ReportMode == `json` && conf.Compress == `gzip` && !conf.Batch:
+					wg.Add(1)
+					go func(wg *sync.WaitGroup, l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
+						defer wg.Done()
+						ms, ok := <-dataChan
+						if !ok {
+							l.Error("sending gzipped batch of metrics", "error", myErrors.ErrReadFromClosedChannel.Error())
+							return
+						}
+						err := sendMetricaToServerJSONgzip(l, ms, config.AddressServer, client, conf.Key)
+						if err != nil {
+							l.Error("sending gzipped json metrica", "error", err.Error())
+						}
+					}(wg, l, dataChan, conf, client)
+				case conf.ReportMode == `json` && conf.Compress == `none` && !conf.Batch:
+					wg.Add(1)
+					go func(wgr *sync.WaitGroup, l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
+						defer wg.Done()
+						ms, ok := <-dataChan
+						if !ok {
+							l.Error("sending gzipped batch of metrics", "error", myErrors.ErrReadFromClosedChannel.Error())
+							return
+						}
+						err := sendMetricaToServerJSON(l, ms, config.AddressServer, client, conf.Key)
+						if err != nil {
+							l.Error("sending nongzipped json metrica", "error", err.Error())
+						}
+					}(wg, l, dataChan, conf, client)
+				case conf.ReportMode == `raw` && !conf.Batch:
+					wg.Add(1)
+					go func(wg *sync.WaitGroup, l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
+						defer wg.Done()
+						ms, ok := <-dataChan
+						if !ok {
+							l.Error("sending gzipped batch of metrics", "error", myErrors.ErrReadFromClosedChannel.Error())
+							return
+						}
+						err := sendMetricsToServerQueryStr(l, ms, config.AddressServer, client)
+						if err != nil {
+							l.Error("sending query string metrica", "error", err.Error())
+						}
+					}(wg, l, dataChan, conf, client)
 
-		time.Sleep(conf.ReportInterval)
-		for len(dataChan) > 0 {
-			l.Info("Report counter", "Value", reportCounter)
-			switch {
-			case conf.ReportMode == `json` && conf.Compress == `gzip` && !conf.Batch:
-				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
-					err := sendMetricaToServerJSONgzip(l, <-dataChan, config.AddressServer, client, conf.Key)
-					if err != nil {
-						l.Error("sending gzipped json metrica", "error", err.Error())
-					}
-				}(l, dataChan, conf, client)
-			case conf.ReportMode == `json` && conf.Compress == `none` && !conf.Batch:
-				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
-					err := sendMetricaToServerJSON(l, <-dataChan, config.AddressServer, client, conf.Key)
-					if err != nil {
-						l.Error("sending nongzipped json metrica", "error", err.Error())
-					}
-				}(l, dataChan, conf, client)
-			case conf.ReportMode == `raw` && !conf.Batch:
-				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
-					err := sendMetricsToServerQueryStr(l, <-dataChan, config.AddressServer, client)
-					if err != nil {
-						l.Error("sending query string metrica", "error", err.Error())
-					}
-				}(l, dataChan, conf, client)
+				case conf.Batch && conf.Compress == `none`:
+					wg.Add(1)
+					go func(wg *sync.WaitGroup, l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
+						defer wg.Done()
+						ms, ok := <-dataChan
+						if !ok {
+							l.Error("sending gzipped batch of metrics", "error", myErrors.ErrReadFromClosedChannel.Error())
+							return
+						}
+						err := sendMetricaToServerBatch(l, ms, config.AddressServer, client, conf.Key)
+						if err != nil {
+							l.Error("sending nongzipped batch of metrics", "error", err.Error())
+						}
+					}(wg, l, dataChan, conf, client)
 
-			case conf.Batch && conf.Compress == `none`:
-				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
-					err := sendMetricaToServerBatch(l, <-dataChan, config.AddressServer, client, conf.Key)
-					if err != nil {
-						l.Error("sending nongzipped batch of metrics", "error", err.Error())
-					}
-				}(l, dataChan, conf, client)
-
-			case conf.Batch && conf.Compress == `gzip`:
-				go func(l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
-					err := sendMetricaToServerBatchgzip(l, <-dataChan, config.AddressServer, client, conf.Key)
-					if err != nil {
-						l.Error("sending gzipped batch of metrics", "error", err.Error())
-					}
-				}(l, dataChan, conf, client)
+				case conf.Batch && conf.Compress == `gzip`:
+					wg.Add(1)
+					go func(wgr *sync.WaitGroup, l logger, dataChan chan MetricsAddGetter, config *config.AgentConfig, client *http.Client) {
+						defer wg.Done()
+						ms, ok := <-dataChan
+						if !ok {
+							l.Error("sending gzipped batch of metrics", "error", myErrors.ErrReadFromClosedChannel.Error())
+							return
+						}
+						err := sendMetricaToServerBatchgzip(l, ms, config.AddressServer, client, conf.Key)
+						if err != nil {
+							l.Error("sending gzipped batch of metrics", "error", err.Error())
+						}
+					}(wg, l, dataChan, conf, client)
+				}
 			}
-		}
-		reportCounter++
+			reportCounter++
 
-		if <-controlChan {
-			l.Info("Reporting metrica stopped")
-			break REPORTING
+		case <-stopChan:
+			l.Info("get signal to stop metrica reporting")
+			l.Info("metrica reporting stopped")
+			return
 		}
 	}
 }

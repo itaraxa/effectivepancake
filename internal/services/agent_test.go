@@ -95,7 +95,7 @@ func Test_collectMetrics(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := collectMetrics(tt.args.pollCount)
+			got, err := collectMetrics(nil, tt.args.pollCount)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("collectMetrics() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -142,7 +142,7 @@ func Test_collectOtherMetrics(t *testing.T) {
 func TestPollMetrics(t *testing.T) {
 	type args struct {
 		wg          *sync.WaitGroup
-		controlChan chan bool
+		controlChan chan struct{}
 		dataChan    chan MetricsAddGetter
 		l           logger
 		config      *config.AgentConfig
@@ -163,7 +163,7 @@ func TestPollMetrics(t *testing.T) {
 func TestReportMetrics(t *testing.T) {
 	type args struct {
 		wg          *sync.WaitGroup
-		controlChan chan bool
+		controlChan chan struct{}
 		dataChan    chan MetricsAddGetter
 		l           logger
 		config      *config.AgentConfig

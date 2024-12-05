@@ -17,6 +17,8 @@ var (
 	ErrEmptyMetricaRawValue    = errors.New("empty metrica raw value in query")
 	ErrGettingAnswerFromServer = errors.New("cannot read server answer")
 	ErrMemStorageNotInitilized = errors.New("memstorage not initialized")
+	ErrGetVirtualMemory        = errors.New("cannot get virtual memory")
+	ErrGetCPUutilization       = errors.New("cannot get CPU utilization")
 
 	// Agent errors
 	ErrRequestCreating        = errors.New("creating request error")
@@ -27,4 +29,5 @@ var (
 	ErrAddPollCount           = errors.New("error adding pollCount into an instance of the models.Metrics")
 	ErrAddData                = errors.New("error adding data into an instance of the models.Metrics")
 	ErrNoMetrics              = errors.New("GetData() didn't return any metrics")
+	ErrReadFromClosedChannel  = errors.New("attempt to read from a closed channel")
 )
