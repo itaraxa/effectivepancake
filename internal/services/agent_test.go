@@ -142,7 +142,7 @@ func Test_collectOtherMetrics(t *testing.T) {
 func TestPollMetrics(t *testing.T) {
 	type args struct {
 		wg          *sync.WaitGroup
-		controlChan chan bool
+		controlChan chan struct{}
 		dataChan    chan MetricsAddGetter
 		l           logger
 		config      *config.AgentConfig
@@ -163,7 +163,7 @@ func TestPollMetrics(t *testing.T) {
 func TestReportMetrics(t *testing.T) {
 	type args struct {
 		wg          *sync.WaitGroup
-		controlChan chan bool
+		controlChan chan struct{}
 		dataChan    chan MetricsAddGetter
 		l           logger
 		config      *config.AgentConfig
